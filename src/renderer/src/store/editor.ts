@@ -16,7 +16,7 @@ import {
   nudgePages,
   appendDocument
 } from '@core/pages'
-import type { PageObject, ObjectId } from '@core/objects'
+import type { PageObject, ObjectId, DashStyle } from '@core/objects'
 import { newId, rotateObjectCW } from '@core/objects'
 import type { History } from '@core/history'
 import { emptyHistory, push, undo as hUndo, redo as hRedo } from '@core/history'
@@ -66,6 +66,17 @@ export interface ShapeStyle {
   strokeWidth: number
   fill: string | null
   opacity: number
+  dash: DashStyle
+}
+
+/** 지우개(흰 도형으로 덮기) 설정 — pdfguru 의 Eraser: 도형 기반, 테두리/채우기/스타일 변경 가능 */
+export interface EraserStyle {
+  kind: 'rect' | 'ellipse'
+  stroke: string
+  strokeWidth: number
+  fill: string
+  opacity: number
+  dash: DashStyle
 }
 
 interface Snapshot {
@@ -89,7 +100,7 @@ interface EditorState {
   textStyle: TextStyle
   penStyle: PenStyle
   highlightStyle: PenStyle
-  whiteoutWidth: number
+  eraserStyle: EraserStyle
   shapeStyle: ShapeStyle
   /** 저장해 둔 서명 이미지들 (dataUrl) */
   savedSigns: string[]
@@ -121,7 +132,7 @@ interface EditorState {
   setTextStyle(p: Partial<TextStyle>): void
   setPenStyle(p: Partial<PenStyle>): void
   setHighlightStyle(p: Partial<PenStyle>): void
-  setWhiteoutWidth(w: number): void
+  setEraserStyle(p: Partial<EraserStyle>): void
   setShapeStyle(p: Partial<ShapeStyle>): void
   addSavedSign(dataUrl: string): void
   setSelected(s: { pageId: string; objectId: ObjectId } | null): void
@@ -226,8 +237,8 @@ export const useEditor = create<EditorState>()((set, get) => {
     textStyle: DEFAULT_TEXT,
     penStyle: { color: '#2563eb', width: 0.004, opacity: 1 },
     highlightStyle: { color: '#facc15', width: 0.025, opacity: 0.45 },
-    whiteoutWidth: 0.02,
-    shapeStyle: { stroke: '#2563eb', strokeWidth: 0.004, fill: null, opacity: 1 },
+    eraserStyle: { kind: 'rect', stroke: '#ffffff', strokeWidth: 0.002, fill: '#ffffff', opacity: 1, dash: 'solid' },
+    shapeStyle: { stroke: '#2563eb', strokeWidth: 0.004, fill: null, opacity: 1, dash: 'solid' },
     savedSigns: [],
     selected: null,
     pendingImage: null,
@@ -342,7 +353,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     setTextStyle: (p) => set((s) => ({ textStyle: { ...s.textStyle, ...p } })),
     setPenStyle: (p) => set((s) => ({ penStyle: { ...s.penStyle, ...p } })),
     setHighlightStyle: (p) => set((s) => ({ highlightStyle: { ...s.highlightStyle, ...p } })),
-    setWhiteoutWidth: (whiteoutWidth) => set({ whiteoutWidth }),
+    setEraserStyle: (p) => set((s) => ({ eraserStyle: { ...s.eraserStyle, ...p } })),
     setShapeStyle: (p) => set((s) => ({ shapeStyle: { ...s.shapeStyle, ...p } })),
     addSavedSign: (dataUrl) => set((s) => ({ savedSigns: [...s.savedSigns, dataUrl] })),
     setSelected: (selected) => set({ selected }),

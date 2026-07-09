@@ -83,6 +83,8 @@ export interface StrokeObj extends BaseObj {
 
 export type ShapeKind = 'rect' | 'ellipse' | 'cross' | 'check'
 
+export type DashStyle = 'solid' | 'dotted' | 'dashed'
+
 export interface ShapeObj extends BaseObj {
   type: 'shape'
   kind: ShapeKind
@@ -91,6 +93,8 @@ export interface ShapeObj extends BaseObj {
   /** 테두리 굵기 = 페이지 폭 대비 비율 */
   strokeWidth: number
   fill: string | null
+  /** 테두리 선 스타일 (기본 solid) */
+  dash?: DashStyle
 }
 
 /** 이미지/스탬프/서명 — 전부 비트맵으로 얹는다 */

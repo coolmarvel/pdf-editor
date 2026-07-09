@@ -1,0 +1,9 @@
+# NSIS 설치 라이선스 화면에 그대로 표시되는 파일 — CRLF 바이트를 보존해야 줄바꿈이 안 깨진다
+build/license.txt -text
+
+# 바이너리 자산 (줄바꿈 변환·diff 금지)
+*.ico binary
+*.bmp binary
+*.png binary
+*.pdf binary
+*.exe binary

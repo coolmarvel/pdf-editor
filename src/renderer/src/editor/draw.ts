@@ -135,9 +135,12 @@ function drawShape(ctx: CanvasRenderingContext2D, sh: ShapeObj, W: number, H: nu
   const h = r.h * H
   ctx.globalAlpha = sh.opacity
   ctx.strokeStyle = sh.stroke
-  ctx.lineWidth = Math.max(1, sh.strokeWidth * W)
-  ctx.lineCap = 'round'
+  const lw = Math.max(1, sh.strokeWidth * W)
+  ctx.lineWidth = lw
+  ctx.lineCap = sh.dash === 'dotted' ? 'butt' : 'round'
   ctx.lineJoin = 'round'
+  // 테두리 선 스타일 (굵기에 비례)
+  ctx.setLineDash(sh.dash === 'dotted' ? [lw, lw * 1.6] : sh.dash === 'dashed' ? [lw * 3, lw * 2] : [])
   switch (sh.kind) {
     case 'rect':
       if (sh.fill) {
@@ -171,6 +174,7 @@ function drawShape(ctx: CanvasRenderingContext2D, sh: ShapeObj, W: number, H: nu
       ctx.stroke()
       break
   }
+  ctx.setLineDash([])
   ctx.globalAlpha = 1
 }
 

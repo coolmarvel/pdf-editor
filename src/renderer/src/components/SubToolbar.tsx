@@ -24,8 +24,26 @@ import AddRounded from '@mui/icons-material/AddRounded'
 import ArrowDropDownRounded from '@mui/icons-material/ArrowDropDownRounded'
 import OpacityRounded from '@mui/icons-material/OpacityRounded'
 import { useEditor, type TextStyle } from '@renderer/store/editor'
-import type { PageObject, TextObj, EditTextObj, ShapeObj, NoteObj } from '@core/objects'
+import type { PageObject, TextObj, EditTextObj, ShapeObj, NoteObj, DashStyle } from '@core/objects'
 import { FONT_STACKS, measureTextWidthPx } from '@renderer/editor/draw'
+
+/** 테두리 선 스타일 선택 — 각 항목을 실제 선 모양으로 표시 */
+function DashSelect({ value, onChange }: { value: DashStyle; onChange: (d: DashStyle) => void }): JSX.Element {
+  const sample = (d: DashStyle): JSX.Element => (
+    <Box sx={{ width: 44, borderTop: `2.5px ${d === 'solid' ? 'solid' : d === 'dotted' ? 'dotted' : 'dashed'} #1f2430`, my: '9px' }} />
+  )
+  return (
+    <Tooltip title="테두리 스타일">
+      <Select size="small" value={value} onChange={(e) => onChange(e.target.value as DashStyle)} sx={{ '& .MuiSelect-select': { py: 0.4, display: 'flex', alignItems: 'center' } }}>
+        {(['solid', 'dotted', 'dashed'] as const).map((d) => (
+          <MenuItem key={d} value={d}>
+            {sample(d)}
+          </MenuItem>
+        ))}
+      </Select>
+    </Tooltip>
+  )
+}
 
 /** pt ↔ 정규화(세로 842pt 기준) 변환 — UI 표기용 */
 const ptToSize = (pt: number): number => pt / 842
@@ -287,8 +305,8 @@ export default function SubToolbar(): JSX.Element | null {
   const setPenStyle = useEditor((s) => s.setPenStyle)
   const highlightStyle = useEditor((s) => s.highlightStyle)
   const setHighlightStyle = useEditor((s) => s.setHighlightStyle)
-  const whiteoutWidth = useEditor((s) => s.whiteoutWidth)
-  const setWhiteoutWidth = useEditor((s) => s.setWhiteoutWidth)
+  const eraserStyle = useEditor((s) => s.eraserStyle)
+  const setEraserStyle = useEditor((s) => s.setEraserStyle)
   const shapeStyle = useEditor((s) => s.shapeStyle)
   const setShapeStyle = useEditor((s) => s.setShapeStyle)
   const updateObject = useEditor((s) => s.updateObject)
@@ -299,7 +317,8 @@ export default function SubToolbar(): JSX.Element | null {
     : null
 
   const bar = (children: React.ReactNode): JSX.Element => (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.5, borderBottom: 1, borderColor: 'divider', bgcolor: '#fff', minHeight: 42, overflowX: 'auto' }}>
+    // height 고정(minHeight 아님): 도구마다 내용 높이가 다르면 페이지가 세로로 튀어 좌표가 어긋난다
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, borderBottom: 1, borderColor: 'divider', bgcolor: '#fff', height: 50, flexShrink: 0, overflowX: 'auto', overflowY: 'hidden' }}>
       {children}
       {selObj && selected && (
         <>
@@ -374,6 +393,7 @@ export default function SubToolbar(): JSX.Element | null {
               </MenuItem>
             ))}
           </Select>
+          <DashSelect value={sh.dash ?? 'solid'} onChange={(dash) => patch({ dash })} />
           {(sh.kind === 'rect' || sh.kind === 'ellipse') && (
             <PaletteControl title="채우기 색" label="채우기" value={sh.fill} onChange={(fill) => patch({ fill })} allowNone />
           )}
@@ -441,27 +461,29 @@ export default function SubToolbar(): JSX.Element | null {
         </>
       )
     case 'whiteout':
+      // 지우개 = 도형으로 덮기 (Guru Eraser). 도형 선택은 메인 툴바의 도형 버튼(연동)에서
       return bar(
         <>
-          <Typography variant="caption" color="text.secondary">
-            굵기
-          </Typography>
-          <Select size="small" value={widthToPt(whiteoutWidth)} onChange={(e) => setWhiteoutWidth(ptToWidth(Number(e.target.value)))}>
-            {[5, 8, 12, 18, 30, 45].map((pt) => (
+          <PaletteControl title="테두리 색" value={eraserStyle.stroke} onChange={(c) => setEraserStyle({ stroke: c ?? '#ffffff' })} />
+          <Select size="small" value={widthToPt(eraserStyle.strokeWidth)} onChange={(e) => setEraserStyle({ strokeWidth: ptToWidth(Number(e.target.value)) })}>
+            {PEN_WIDTHS.map((pt) => (
               <MenuItem key={pt} value={pt}>
                 {pt} pt
               </MenuItem>
             ))}
           </Select>
-          <Typography variant="caption" color="text.secondary">
-            드래그한 곳을 흰색으로 덮습니다
+          <DashSelect value={eraserStyle.dash} onChange={(dash) => setEraserStyle({ dash })} />
+          <PaletteControl title="채우기 색" label="채우기" value={eraserStyle.fill} onChange={(c) => setEraserStyle({ fill: c ?? '#ffffff' })} />
+          <OpacityControl value={eraserStyle.opacity} onChange={(opacity) => setEraserStyle({ opacity })} />
+          <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+            드래그한 영역을 덮어서 지웁니다
           </Typography>
         </>
       )
     case 'eraseDrawing':
       return bar(
         <Typography variant="caption" color="text.secondary">
-          연필·형광펜·흰색 칠을 클릭하거나 문질러 지웁니다
+          연필·형광펜 선을 클릭하거나 문질러 지웁니다
         </Typography>
       )
     case 'rect':
@@ -478,6 +500,10 @@ export default function SubToolbar(): JSX.Element | null {
               </MenuItem>
             ))}
           </Select>
+          <DashSelect value={shapeStyle.dash} onChange={(dash) => setShapeStyle({ dash })} />
+          {(tool === 'rect' || tool === 'ellipse') && (
+            <PaletteControl title="채우기 색" label="채우기" value={shapeStyle.fill} onChange={(fill) => setShapeStyle({ fill })} allowNone />
+          )}
           {(tool === 'rect' || tool === 'ellipse') && (
             <Typography variant="caption" color="text.secondary">
               드래그해서 그리기

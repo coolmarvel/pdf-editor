@@ -48,37 +48,42 @@ interface ToolBtnProps {
   active?: boolean
   disabled?: boolean
   onClick: (e: React.MouseEvent<HTMLElement>) => void
-  dropdown?: boolean
+  /** 있으면 스플릿 버튼: 기능 버튼(onClick=토글)과 별도의 ⌄ 버튼(메뉴 열기) — Guru 동작 */
+  onDropdown?: (e: React.MouseEvent<HTMLElement>) => void
 }
 
-function ToolBtn({ label, icon, active, disabled, onClick, dropdown }: ToolBtnProps): JSX.Element {
+function ToolBtn({ label, icon, active, disabled, onClick, onDropdown }: ToolBtnProps): JSX.Element {
   return (
-    <Tooltip title={label}>
-      <span>
-        <IconButton
-          size="small"
-          disabled={disabled}
-          onClick={onClick}
-          sx={{
-            flexDirection: 'column',
-            borderRadius: 2,
-            px: 0.8,
-            py: 0.4,
-            color: active ? 'primary.main' : 'text.primary',
-            bgcolor: active ? 'primary.light' : 'transparent',
-            '&:hover': { bgcolor: active ? 'primary.light' : '#f1f2f4' }
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            {icon}
-            {dropdown && <ArrowDropDownRounded sx={{ fontSize: 16, ml: -0.5 }} />}
-          </Box>
-          <Typography variant="caption" sx={{ fontSize: 11, lineHeight: 1.15, mt: 0.2, whiteSpace: 'nowrap' }}>
-            {label}
-          </Typography>
+    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+      <Tooltip title={label}>
+        <span>
+          <IconButton
+            size="small"
+            disabled={disabled}
+            onClick={onClick}
+            sx={{
+              flexDirection: 'column',
+              borderRadius: 2,
+              px: 0.8,
+              py: 0.4,
+              color: active ? 'primary.main' : 'text.primary',
+              bgcolor: active ? 'primary.light' : 'transparent',
+              '&:hover': { bgcolor: active ? 'primary.light' : '#f1f2f4' }
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>{icon}</Box>
+            <Typography variant="caption" sx={{ fontSize: 11, lineHeight: 1.15, mt: 0.2, whiteSpace: 'nowrap' }}>
+              {label}
+            </Typography>
+          </IconButton>
+        </span>
+      </Tooltip>
+      {onDropdown && (
+        <IconButton size="small" onClick={onDropdown} sx={{ borderRadius: 1.5, p: 0, ml: -0.4, alignSelf: 'stretch', width: 16, color: 'text.secondary', '&:hover': { bgcolor: '#f1f2f4' } }}>
+          <ArrowDropDownRounded sx={{ fontSize: 18 }} />
         </IconButton>
-      </span>
-    </Tooltip>
+      )}
+    </Box>
   )
 }
 
@@ -101,13 +106,21 @@ export default function Toolbar(p: ToolbarProps): JSX.Element {
   const pages = useEditor((s) => s.pages)
   const currentPage = useEditor((s) => s.currentPage)
   const pageRotate = useEditor((s) => s.pageRotate)
+  const eraserKind = useEditor((s) => s.eraserStyle.kind)
+  const setEraserStyle = useEditor((s) => s.setEraserStyle)
 
   const [eraserMenu, setEraserMenu] = useState<HTMLElement | null>(null)
   const [imageMenu, setImageMenu] = useState<HTMLElement | null>(null)
   const [shapeMenu, setShapeMenu] = useState<HTMLElement | null>(null)
   const [layoutMenu, setLayoutMenu] = useState<HTMLElement | null>(null)
+  // 스플릿 버튼의 "기본값" = 마지막으로 쓴 변형 (기능 버튼이 이걸 켜고 끈다)
+  const [lastEraser, setLastEraser] = useState<'whiteout' | 'eraseDrawing'>('whiteout')
+  const [lastShape, setLastShape] = useState<'rect' | 'ellipse'>('rect')
+  const [lastImage, setLastImage] = useState<'image' | 'stamp'>('image')
 
   const is = (t: Tool): boolean => tool === t
+  /** 도구 토글 (Guru): 활성 상태에서 다시 누르면 비활성(선택 도구로) */
+  const toggle = (t: Tool): void => setTool(tool === t ? 'select' : t)
 
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', px: 1, py: 0.3, borderBottom: 1, borderColor: 'divider', bgcolor: '#fff', gap: 0.2, flexWrap: 'nowrap', overflowX: 'auto' }}>
@@ -118,35 +131,55 @@ export default function Toolbar(p: ToolbarProps): JSX.Element {
 
       <Box sx={{ flex: 1 }} />
 
-      <ToolBtn label="텍스트 추가" icon={<TitleRounded />} active={is('addText')} onClick={() => setTool('addText')} />
+      <ToolBtn label="텍스트 추가" icon={<TitleRounded />} active={is('addText')} onClick={() => toggle('addText')} />
       {/* 텍스트 수정은 토글(세션) — 켜져 있는 동안 하이라이트 유지, 다시 누르면 종료(변경 있으면 저장 확인) */}
       <ToolBtn label="텍스트 수정" icon={<EditNoteRounded />} active={is('editText')} onClick={() => setTool(is('editText') ? 'select' : 'editText')} />
       <ToolBtn
         label="지우개"
         icon={<EraserIcon />}
         active={is('whiteout') || is('eraseDrawing')}
-        dropdown
-        onClick={(e) => setEraserMenu(e.currentTarget)}
+        onClick={() => {
+          if (is('whiteout') || is('eraseDrawing')) {
+            setTool('select')
+          } else if (lastEraser === 'whiteout') {
+            setEraserStyle({ kind: 'rect' })
+            setTool('whiteout')
+          } else {
+            setTool('eraseDrawing')
+          }
+        }}
+        onDropdown={(e) => setEraserMenu(e.currentTarget)}
       />
-      <ToolBtn label="형광펜" icon={<BorderColorRounded />} active={is('highlight')} onClick={() => setTool('highlight')} />
-      <ToolBtn label="연필" icon={<CreateRounded />} active={is('pencil')} onClick={() => setTool('pencil')} />
-      <ToolBtn label="이미지" icon={<ImageOutlined />} active={is('image') || is('stamp')} dropdown onClick={(e) => setImageMenu(e.currentTarget)} />
+      <ToolBtn label="형광펜" icon={<BorderColorRounded />} active={is('highlight')} onClick={() => toggle('highlight')} />
+      <ToolBtn label="연필" icon={<CreateRounded />} active={is('pencil')} onClick={() => toggle('pencil')} />
       <ToolBtn
-        label={tool === 'ellipse' ? '원' : '사각형'}
-        icon={tool === 'ellipse' ? <CircleOutlined /> : <CropSquareRounded />}
-        active={is('rect') || is('ellipse')}
-        dropdown
-        onClick={(e) => setShapeMenu(e.currentTarget)}
+        label={lastImage === 'stamp' ? '스탬프' : '이미지'}
+        icon={lastImage === 'stamp' ? <ApprovalRounded /> : <ImageOutlined />}
+        active={is('image') || is('stamp')}
+        onClick={() => (lastImage === 'stamp' ? p.onOpenStamp() : p.onOpenImage())}
+        onDropdown={(e) => setImageMenu(e.currentTarget)}
       />
-      <ToolBtn label="X 표시" icon={<CloseRounded />} active={is('cross')} onClick={() => setTool('cross')} />
-      <ToolBtn label="체크" icon={<CheckRounded />} active={is('check')} onClick={() => setTool('check')} />
+      {/* 도형 버튼은 지우개(도형 덮기)와 연동: 지우개가 켜지면 그 도형(기본 사각형)을 표시하며 함께 활성 */}
+      <ToolBtn
+        label={(tool === 'rect' || tool === 'ellipse' ? tool : tool === 'whiteout' ? eraserKind : lastShape) === 'ellipse' ? '원' : '사각형'}
+        icon={(tool === 'rect' || tool === 'ellipse' ? tool : tool === 'whiteout' ? eraserKind : lastShape) === 'ellipse' ? <CircleOutlined /> : <CropSquareRounded />}
+        active={is('rect') || is('ellipse') || is('whiteout')}
+        onClick={() => {
+          if (is('rect') || is('ellipse') || is('whiteout')) setTool('select')
+          else setTool(lastShape)
+        }}
+        onDropdown={(e) => setShapeMenu(e.currentTarget)}
+      />
+      <ToolBtn label="X 표시" icon={<CloseRounded />} active={is('cross')} onClick={() => toggle('cross')} />
+      <ToolBtn label="체크" icon={<CheckRounded />} active={is('check')} onClick={() => toggle('check')} />
       <ToolBtn label="서명" icon={<DrawRounded />} active={is('sign')} onClick={p.onOpenSign} />
-      <ToolBtn label="주석" icon={<ChatBubbleOutlineRounded />} active={is('note')} onClick={() => setTool('note')} />
-      <ToolBtn label="링크" icon={<LinkRounded />} active={is('link')} onClick={() => setTool('link')} />
+      <ToolBtn label="주석" icon={<ChatBubbleOutlineRounded />} active={is('note')} onClick={() => toggle('note')} />
+      <ToolBtn label="링크" icon={<LinkRounded />} active={is('link')} onClick={() => toggle('link')} />
 
       <Box sx={{ flex: 1 }} />
 
-      <ToolBtn label="페이지 레이아웃" icon={<ArticleOutlined />} dropdown onClick={(e) => setLayoutMenu(e.currentTarget)} />
+      {/* 페이지 레이아웃은 순수 메뉴 버튼 — 본체·⌄ 어느 쪽을 눌러도 메뉴 */}
+      <ToolBtn label="페이지 레이아웃" icon={<ArticleOutlined />} onClick={(e) => setLayoutMenu(e.currentTarget)} onDropdown={(e) => setLayoutMenu(e.currentTarget)} />
       <ToolBtn label="페이지 관리" icon={<GridViewRounded />} onClick={p.onManagePages} />
 
       {/* ── 드롭다운 메뉴들 ── */}
@@ -154,6 +187,8 @@ export default function Toolbar(p: ToolbarProps): JSX.Element {
         <MenuItem
           selected={is('whiteout')}
           onClick={() => {
+            setLastEraser('whiteout')
+            setEraserStyle({ kind: 'rect' }) // 지우개 진입 시 도형은 항상 사각형으로 리셋 (Guru 동작)
             setTool('whiteout')
             setEraserMenu(null)
           }}
@@ -161,11 +196,12 @@ export default function Toolbar(p: ToolbarProps): JSX.Element {
           <ListItemIcon>
             <EraserIcon fontSize="small" />
           </ListItemIcon>
-          <ListItemText primary="지우개 (흰색 칠)" secondary="원본 내용을 덮어서 지움" />
+          <ListItemText primary="지우개" secondary="드래그한 영역을 도형으로 덮어서 지움" />
         </MenuItem>
         <MenuItem
           selected={is('eraseDrawing')}
           onClick={() => {
+            setLastEraser('eraseDrawing')
             setTool('eraseDrawing')
             setEraserMenu(null)
           }}
@@ -180,6 +216,7 @@ export default function Toolbar(p: ToolbarProps): JSX.Element {
       <Menu anchorEl={imageMenu} open={!!imageMenu} onClose={() => setImageMenu(null)}>
         <MenuItem
           onClick={() => {
+            setLastImage('image')
             setImageMenu(null)
             p.onOpenImage()
           }}
@@ -191,6 +228,7 @@ export default function Toolbar(p: ToolbarProps): JSX.Element {
         </MenuItem>
         <MenuItem
           onClick={() => {
+            setLastImage('stamp')
             setImageMenu(null)
             p.onOpenStamp()
           }}
@@ -203,10 +241,16 @@ export default function Toolbar(p: ToolbarProps): JSX.Element {
       </Menu>
 
       <Menu anchorEl={shapeMenu} open={!!shapeMenu} onClose={() => setShapeMenu(null)}>
+        {/* 지우개(도형 덮기)가 켜져 있으면 이 메뉴는 지우개 도형을 바꾼다 */}
         <MenuItem
-          selected={is('rect')}
+          selected={tool === 'whiteout' ? eraserKind === 'rect' : is('rect')}
           onClick={() => {
-            setTool('rect')
+            if (tool === 'whiteout') {
+              setEraserStyle({ kind: 'rect' })
+            } else {
+              setLastShape('rect')
+              setTool('rect')
+            }
             setShapeMenu(null)
           }}
         >
@@ -216,9 +260,14 @@ export default function Toolbar(p: ToolbarProps): JSX.Element {
           <ListItemText>사각형</ListItemText>
         </MenuItem>
         <MenuItem
-          selected={is('ellipse')}
+          selected={tool === 'whiteout' ? eraserKind === 'ellipse' : is('ellipse')}
           onClick={() => {
-            setTool('ellipse')
+            if (tool === 'whiteout') {
+              setEraserStyle({ kind: 'ellipse' })
+            } else {
+              setLastShape('ellipse')
+              setTool('ellipse')
+            }
             setShapeMenu(null)
           }}
         >

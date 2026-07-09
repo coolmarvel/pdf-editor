@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
 import Popover from '@mui/material/Popover'
 import Tooltip from '@mui/material/Tooltip'
@@ -63,6 +63,11 @@ const rotateCursorSvg = (px: number): string =>
   `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='${px}' height='${px}' viewBox='0 0 24 24'%3E%3Cpath d='M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-8 8s3.57 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z' fill='%231f2430' stroke='white' stroke-width='1.6' paint-order='stroke' stroke-linejoin='round'/%3E%3C/svg%3E")`
 const ROTATE_CURSOR = `-webkit-image-set(${rotateCursorSvg(24)} 1x, ${rotateCursorSvg(48)} 2x) 12 12, grab`
 
+/** 그리기 지우개 커서: 속이 빈 원 (지우개 브러시 — Guru 동작). 흰 외곽선으로 어두운 배경에서도 보이게 */
+const eraseCursorSvg = (px: number): string =>
+  `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='${px}' height='${px}' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='8.5' fill='none' stroke='white' stroke-width='3.2'/%3E%3Ccircle cx='12' cy='12' r='8.5' fill='none' stroke='%231f2430' stroke-width='1.5'/%3E%3C/svg%3E")`
+const ERASE_CURSOR = `-webkit-image-set(${eraseCursorSvg(24)} 1x, ${eraseCursorSvg(48)} 2x) 12 12, auto`
+
 /** 페이지 1장 = PDF 캔버스 + 객체 오버레이 + 인터랙션 레이어 */
 export default function PageCanvas({ page, zoom }: Props): JSX.Element {
   const displaySizes = useEditor((s) => s.displaySizes)
@@ -81,7 +86,7 @@ export default function PageCanvas({ page, zoom }: Props): JSX.Element {
   const textStyle = useEditor((s) => s.textStyle)
   const penStyle = useEditor((s) => s.penStyle)
   const highlightStyle = useEditor((s) => s.highlightStyle)
-  const whiteoutWidth = useEditor((s) => s.whiteoutWidth)
+  const eraserStyle = useEditor((s) => s.eraserStyle)
   const shapeStyle = useEditor((s) => s.shapeStyle)
   const pendingImage = useEditor((s) => s.pendingImage)
   const setPendingImage = useEditor((s) => s.setPendingImage)
@@ -130,7 +135,9 @@ export default function PageCanvas({ page, zoom }: Props): JSX.Element {
   }, [visible, page, page.extraRotation, zoom])
 
   // ── 오버레이 렌더 ──
-  const redrawOverlay = useCallback(async () => {
+  // useCallback 금지: 의존성에서 빠진 tool/스타일이 stale 클로저로 잡혀 드래그 미리보기가
+  // 옛 도구 스타일(예: 지우개인데 파란 도형)로 그려진다. 매 렌더 실행되는 이펙트라 메모이즈 이득도 없음.
+  const redrawOverlay = async (): Promise<void> => {
     const canvas = overlayRef.current
     if (!canvas || zoom <= 0) return
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
@@ -162,28 +169,41 @@ export default function PageCanvas({ page, zoom }: Props): JSX.Element {
       ctx.strokeRect(d.rect.x * canvas.width, d.rect.y * canvas.height, d.rect.w * canvas.width, d.rect.h * canvas.height)
       ctx.setLineDash([])
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [objects, cssW, cssH, zoom, editing])
+  }
 
   useEffect(() => {
     void redrawOverlay()
   })
 
   function transientStroke(points: [number, number][]): StrokeObj {
-    const kind = tool === 'highlight' ? 'highlight' : tool === 'whiteout' ? 'whiteout' : 'pencil'
+    const kind = tool === 'highlight' ? 'highlight' : 'pencil'
     const style = tool === 'highlight' ? highlightStyle : penStyle
     return {
       id: 'transient',
       type: 'stroke',
       kind,
       color: style.color,
-      width: kind === 'whiteout' ? whiteoutWidth : style.width,
-      opacity: kind === 'whiteout' ? 1 : style.opacity,
+      width: style.width,
+      opacity: style.opacity,
       points
     }
   }
 
   function transientShape(rect: Rect): PageObject {
+    // 지우개 = 흰 도형으로 덮기 (pdfguru Eraser): 모양·테두리·채우기·스타일은 eraserStyle
+    if (tool === 'whiteout') {
+      return {
+        id: 'transient',
+        type: 'shape',
+        kind: eraserStyle.kind,
+        rect,
+        stroke: eraserStyle.stroke,
+        strokeWidth: eraserStyle.strokeWidth,
+        fill: eraserStyle.fill,
+        opacity: eraserStyle.opacity,
+        dash: eraserStyle.dash
+      }
+    }
     return {
       id: 'transient',
       type: 'shape',
@@ -192,7 +212,8 @@ export default function PageCanvas({ page, zoom }: Props): JSX.Element {
       stroke: shapeStyle.stroke,
       strokeWidth: shapeStyle.strokeWidth,
       fill: shapeStyle.fill,
-      opacity: shapeStyle.opacity
+      opacity: shapeStyle.opacity,
+      dash: shapeStyle.dash
     }
   }
 
@@ -217,6 +238,70 @@ export default function PageCanvas({ page, zoom }: Props): JSX.Element {
   }
 
   const editingObj = editing ? (objects.find((o) => o.id === editing.objectId) ?? null) : null
+
+  /**
+   * 그리기 지우개: 브러시가 지나간 경로(선분 x0,y0→x1,y1)에 닿은 "구간만" 지운다 — 선 전체가 아니라.
+   * 닿은 점을 걷어내고 남은 연속 구간들을 각각 새 선으로 분리. 제스처당 히스토리 1단계(dragRef.moved).
+   * 선분 판정인 이유: pointermove 가 병합되면 샘플 간격이 브러시보다 넓어져 중간이 건너뛰어진다.
+   */
+  function eraseStrokesAlong(x0: number, y0: number, x1: number, y1: number): void {
+    // px 공간 선분-점 거리 (aspect 보정)
+    const ax = x0 * aspect
+    const ay = y0
+    const dxs = x1 * aspect - ax
+    const dys = y1 - ay
+    const len2 = dxs * dxs + dys * dys
+    const distToPath = (p: [number, number]): number => {
+      const px = p[0] * aspect
+      const py = p[1]
+      const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dxs + (py - ay) * dys) / len2))
+      return Math.hypot(px - (ax + dxs * t), py - (ay + dys * t))
+    }
+    // 렌더 클로저의 objects 는 연속 pointermove 에서 stale 해질 수 있다 → 스토어에서 직접
+    const live = useEditor.getState().objectsByPage[page.id] ?? []
+    for (const o of live) {
+      if (o.type !== 'stroke') continue
+      const rr = 0.012 + o.width / 2
+      const hitAt = (p: [number, number]): boolean => distToPath(p) < rr
+      if (!o.points.some(hitAt)) continue
+      if (dragRef.current && !dragRef.current.moved) {
+        markHistory()
+        dragRef.current.moved = true
+      }
+      // 점이 드문 선(특히 형광펜)은 한 점만 지워도 긴 구간이 통째로 사라져 뭉텅이로 보인다
+      // → 지우기 전에 점을 촘촘히 보간해 브러시가 닿은 만큼만 매끄럽게 잘리게 한다
+      const maxStep = 0.004
+      const dense: [number, number][] = []
+      for (let i = 0; i < o.points.length; i++) {
+        if (i > 0) {
+          const q = o.points[i - 1]
+          const p = o.points[i]
+          const seg = Math.hypot((p[0] - q[0]) * aspect, p[1] - q[1])
+          const n = Math.floor(seg / maxStep)
+          for (let k = 1; k <= n; k++) {
+            dense.push([q[0] + ((p[0] - q[0]) * k) / (n + 1), q[1] + ((p[1] - q[1]) * k) / (n + 1)])
+          }
+        }
+        dense.push(o.points[i])
+      }
+      // 살아남은 연속 구간으로 분할
+      const runs: [number, number][][] = []
+      let cur: [number, number][] = []
+      for (const p of dense) {
+        if (hitAt(p)) {
+          if (cur.length > 0) runs.push(cur)
+          cur = []
+        } else {
+          cur.push(p)
+        }
+      }
+      if (cur.length > 0) runs.push(cur)
+      removeObjectTransient(page.id, o.id)
+      for (const run of runs) {
+        if (run.length >= 2) addObjectTransient(page.id, { ...o, id: newId(), points: run })
+      }
+    }
+  }
 
   /** 클릭 지점(정규화)이 텍스트의 몇 번째 글자 앞인지 — 캐럿 초기 위치용 */
   function caretIndexFor(obj: TextObj | EditTextObj, xN: number, yN: number): number {
@@ -415,14 +500,15 @@ export default function PageCanvas({ page, zoom }: Props): JSX.Element {
       }
       case 'pencil':
       case 'highlight':
-      case 'whiteout':
         dragRef.current = { kind: 'draw', startX: x, startY: y, points: [[x, y]] }
         bump()
         break
+      case 'whiteout': // 지우개: 드래그 = 흰 도형으로 덮기
+        dragRef.current = { kind: 'shape', startX: x, startY: y, rect: { x, y, w: 0, h: 0 } }
+        break
       case 'eraseDrawing': {
-        const strokeHit = [...objects].reverse().find((o) => o.type === 'stroke' && hitTest(o, x, y, 0.012))
-        if (strokeHit) removeObject(page.id, strokeHit.id)
-        dragRef.current = { kind: 'move', startX: x, startY: y } // 문지르기 지우기용 마커
+        dragRef.current = { kind: 'move', startX: x, startY: y, moved: false } // 문지르기 지우기용 마커 (startX/Y = 직전 위치)
+        eraseStrokesAlong(x, y, x, y)
         break
       }
       case 'rect':
@@ -491,8 +577,9 @@ export default function PageCanvas({ page, zoom }: Props): JSX.Element {
       const dy = y - d.startY
       updateObjectTransient(page.id, d.objectId, moveObject(d.orig, dx, dy))
     } else if (tool === 'eraseDrawing') {
-      const strokeHit = [...objects].reverse().find((o) => o.type === 'stroke' && hitTest(o, x, y, 0.012))
-      if (strokeHit) removeObject(page.id, strokeHit.id)
+      eraseStrokesAlong(d.startX, d.startY, x, y) // 직전 위치→현재 위치 경로 전체를 지운다
+      d.startX = x
+      d.startY = y
     }
   }
 
@@ -513,7 +600,8 @@ export default function PageCanvas({ page, zoom }: Props): JSX.Element {
     } else if (d.kind === 'shape' && d.rect && d.rect.w > 0.005 && d.rect.h > 0.005) {
       const obj = { ...transientShape(d.rect), id: newId() }
       addObject(page.id, obj)
-      setTool('select')
+      // 지우개는 연속 사용이 잦아 도구를 유지한다 (Guru 동작). 도형은 원샷 → 선택 도구로
+      if (tool !== 'whiteout') setTool('select')
       setSelected({ pageId: page.id, objectId: obj.id })
     } else if (d.kind === 'link' && d.rect && d.rect.w > 0.01 && d.rect.h > 0.01) {
       const obj: LinkObj = { id: newId(), type: 'link', rect: d.rect, target: { kind: 'url', url: '' }, opacity: 1 }
@@ -689,6 +777,7 @@ export default function PageCanvas({ page, zoom }: Props): JSX.Element {
 
   // 커서 규칙 (Guru): 객체/스팬 호버 = 포인터(👆), 잡고 있는 동안·드래그 = 이동(✥), 그 외 도구별
   const movingNow = dragRef.current?.kind === 'move' && !!dragRef.current.objectId
+  const hasStrokes = objects.some((o) => o.type === 'stroke')
   const cursor = movingNow
     ? 'move'
     : tool === 'hand'
@@ -699,7 +788,11 @@ export default function PageCanvas({ page, zoom }: Props): JSX.Element {
           : 'default'
         : tool === 'addText'
           ? 'text'
-          : 'crosshair'
+          : tool === 'eraseDrawing'
+            ? hasStrokes
+              ? ERASE_CURSOR // 낙서가 있어야 지우개 원이 뜬다 (없으면 기본 커서)
+              : 'default'
+            : 'crosshair'
 
   const noteObj = notePop ? (objects.find((o) => o.id === notePop.objectId) as NoteObj | undefined) : undefined
   const linkObj = linkPop ? (objects.find((o) => o.id === linkPop.objectId) as LinkObj | undefined) : undefined

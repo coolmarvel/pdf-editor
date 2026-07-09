@@ -240,6 +240,57 @@ async function main() {
   await win.waitForTimeout(400)
   await win.screenshot({ path: path.join(OUT, '17-undo-after-save.png'), clip: { x: pb.x, y: pb.y, width: 600, height: 240 } })
 
+  // ══ 지우개(도형 덮기) + 그리기 지우개 커서 ══
+  // 연필로 낙서 → eraseDrawing 커서가 빈 원으로 바뀌는지
+  await win.click('button:has-text("연필")')
+  await win.waitForTimeout(200)
+  await win.mouse.move(pb.x + pb.width * 0.4, pb.y + pb.height * 0.3)
+  await win.mouse.down()
+  await win.mouse.move(pb.x + pb.width * 0.55, pb.y + pb.height * 0.35, { steps: 8 })
+  await win.mouse.up()
+  await win.waitForTimeout(200)
+  await win.click('button:has-text("지우개")')
+  await win.waitForTimeout(300)
+  await win.click('li:has-text("그리기 지우개")')
+  await win.waitForTimeout(500) // MUI 메뉴 백드롭이 닫힐 때까지 (포인터 삼킴 방지)
+  const eraseCur = await curAt()
+  console.log('eraseDrawing cursor has circle svg:', eraseCur.includes('image-set') || eraseCur.includes('svg'))
+  // ① 가운데만 문지르기 → 선이 두 토막으로 쪼개지고(부분 지우기) 커서는 여전히 원
+  await win.mouse.move(pb.x + pb.width * 0.47, pb.y + pb.height * 0.322)
+  await win.waitForTimeout(100)
+  await win.mouse.down()
+  await win.mouse.move(pb.x + pb.width * 0.485, pb.y + pb.height * 0.328, { steps: 4 })
+  await win.mouse.up()
+  await win.waitForTimeout(300)
+  await win.screenshot({ path: path.join(OUT, '20-partial-erase.png'), clip: { x: pb.x + pb.width * 0.3, y: pb.y + pb.height * 0.22, width: 320, height: 150 } })
+  console.log('cursor after partial erase still circle:', (await curAt()).includes('image-set'))
+  // ② 전체 문지르기 → 남은 조각까지 다 지우면 기본 커서
+  await win.mouse.move(pb.x + pb.width * 0.39, pb.y + pb.height * 0.295)
+  await win.mouse.down()
+  await win.mouse.move(pb.x + pb.width * 0.57, pb.y + pb.height * 0.365, { steps: 25 })
+  await win.mouse.up()
+  await win.waitForTimeout(300)
+  const curAfter = await curAt()
+  console.log('cursor after erase-all is default:', curAfter === 'default')
+
+  // 지우개(도형 덮기): "Sample page 1" 위를 드래그 → 흰 사각형으로 덮임
+  await win.mouse.click(pb.x + pb.width * 0.8, pb.y + pb.height * 0.8) // 잔여 상태 정리
+  await win.waitForTimeout(200)
+  await win.click('button:has-text("지우개")')
+  await win.waitForTimeout(300)
+  await win.click('li:has-text("지우개")') // 첫 항목 = 도형 덮기 지우개
+  await win.waitForTimeout(500)
+  await win.mouse.move(pb.x + pb.width * 0.08, pb.y + pb.height * 0.06)
+  await win.waitForTimeout(100)
+  await win.mouse.down()
+  await win.waitForTimeout(80)
+  await win.mouse.move(pb.x + pb.width * 0.45, pb.y + pb.height * 0.12, { steps: 15 })
+  await win.waitForTimeout(80)
+  await win.mouse.up()
+  await win.waitForTimeout(300)
+  await win.screenshot({ path: path.join(OUT, '18-eraser-covered.png'), clip: { x: pb.x, y: pb.y, width: 600, height: 200 } })
+  await win.screenshot({ path: path.join(OUT, '19-eraser-subtoolbar.png'), clip: { x: 0, y: 100, width: 1100, height: 70 } })
+
   await app.close()
   console.log('E2E done')
 }
