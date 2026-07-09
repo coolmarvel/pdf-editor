@@ -9,6 +9,7 @@ import DialogContent from '@mui/material/DialogContent'
 import DialogContentText from '@mui/material/DialogContentText'
 import DialogActions from '@mui/material/DialogActions'
 import { useEditor } from '@renderer/store/editor'
+import { useT } from '@renderer/i18n'
 import { buildPdf } from '@renderer/pdf/save'
 import { fileToDataUrl } from '@renderer/editor/stamp'
 import TopBar from './TopBar'
@@ -22,6 +23,7 @@ import StampDialog from './StampDialog'
 import SignDialog from './SignDialog'
 
 export default function Editor(): JSX.Element {
+  const t = useT()
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const editTextExitPrompt = useEditor((s) => s.editTextExitPrompt)
   const endEditTextSession = useEditor((s) => s.endEditTextSession)
@@ -69,9 +71,9 @@ export default function Editor(): JSX.Element {
       const bytes = await makePdf()
       const s = useEditor.getState()
       const path = await window.api.saveBuffer(`${s.fileName || 'document'}.pdf`, bytes)
-      if (path) setToast({ msg: '저장했습니다.', severity: 'success', path })
+      if (path) setToast({ msg: t('savedToast'), severity: 'success', path })
     } catch (err) {
-      setToast({ msg: `저장 실패: ${err instanceof Error ? err.message : String(err)}`, severity: 'error' })
+      setToast({ msg: `${t('saveFailed')}: ${err instanceof Error ? err.message : String(err)}`, severity: 'error' })
     } finally {
       setBusy(false)
     }
@@ -83,7 +85,7 @@ export default function Editor(): JSX.Element {
       const bytes = await makePdf()
       await window.api.printPdf(bytes)
     } catch (err) {
-      setToast({ msg: `인쇄 실패: ${err instanceof Error ? err.message : String(err)}`, severity: 'error' })
+      setToast({ msg: `${t('printFailed')}: ${err instanceof Error ? err.message : String(err)}`, severity: 'error' })
     } finally {
       setBusy(false)
     }
@@ -96,7 +98,7 @@ export default function Editor(): JSX.Element {
     const { dataUrl, aspect } = await fileToDataUrl(f)
     useEditor.getState().setPendingImage({ dataUrl, aspect, kind: 'image' })
     useEditor.getState().setTool('image')
-    setToast({ msg: '이미지를 놓을 위치를 클릭하세요.', severity: 'success' })
+    setToast({ msg: t('imagePlaceToast'), severity: 'success' })
   }
 
   return (
@@ -126,13 +128,13 @@ export default function Editor(): JSX.Element {
 
       {/* 완료 확인 */}
       <Dialog open={doneOpen} onClose={() => setDoneOpen(false)}>
-        <DialogTitle>편집을 마칠까요?</DialogTitle>
+        <DialogTitle>{t('finishTitle')}</DialogTitle>
         <DialogContent>
-          <DialogContentText>저장하지 않은 편집 내용은 사라집니다.</DialogContentText>
+          <DialogContentText>{t('finishBody')}</DialogContentText>
         </DialogContent>
         <DialogActions>
           <Button color="inherit" onClick={() => setDoneOpen(false)}>
-            계속 편집
+            {t('keepEditing')}
           </Button>
           <Button
             color="inherit"
@@ -141,7 +143,7 @@ export default function Editor(): JSX.Element {
               useEditor.getState().closeDocument()
             }}
           >
-            저장 안 함
+            {t('dontSave')}
           </Button>
           <Button
             variant="contained"
@@ -151,42 +153,42 @@ export default function Editor(): JSX.Element {
               useEditor.getState().closeDocument()
             }}
           >
-            저장 후 닫기
+            {t('saveAndClose')}
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* 텍스트 수정 세션 종료: 변경 저장 확인 (Guru: Save changes before exiting?) */}
       <Dialog open={editTextExitPrompt !== null} onClose={cancelEditTextExit}>
-        <DialogTitle>수정한 내용을 저장할까요?</DialogTitle>
+        <DialogTitle>{t('editTextExitTitle')}</DialogTitle>
         <DialogContent>
-          <DialogContentText>저장하지 않으면 텍스트 수정 중에 바꾼 내용이 사라집니다.</DialogContentText>
+          <DialogContentText>{t('editTextExitBody')}</DialogContentText>
         </DialogContent>
         <DialogActions>
           <Button color="inherit" onClick={cancelEditTextExit}>
-            계속 편집
+            {t('keepEditing')}
           </Button>
           <Button color="inherit" onClick={() => endEditTextSession(false, editTextExitPrompt ?? 'select')}>
-            저장 안 함
+            {t('dontSave')}
           </Button>
           <Button variant="contained" onClick={() => endEditTextSession(true, editTextExitPrompt ?? 'select')}>
-            저장
+            {t('save')}
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* 텍스트 수정: 텍스트 상자 삭제 확인 (Guru: Are you sure you want to delete this text box?) */}
       <Dialog open={!!deletePrompt} onClose={cancelDelete}>
-        <DialogTitle>이 텍스트 상자를 지울까요?</DialogTitle>
+        <DialogTitle>{t('deleteTextTitle')}</DialogTitle>
         <DialogContent>
-          <DialogContentText>지우면 이 자리의 글자가 문서에서 삭제된 상태로 저장됩니다.</DialogContentText>
+          <DialogContentText>{t('deleteTextBody')}</DialogContentText>
         </DialogContent>
         <DialogActions>
           <Button color="inherit" onClick={cancelDelete}>
-            취소
+            {t('cancel')}
           </Button>
           <Button variant="contained" onClick={confirmDelete}>
-            지우기
+            {t('erase')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -198,7 +200,7 @@ export default function Editor(): JSX.Element {
           action={
             toast?.path ? (
               <Button size="small" onClick={() => void window.api.showItem(toast.path!)}>
-                폴더 열기
+                {t('openFolder')}
               </Button>
             ) : undefined
           }

@@ -4,7 +4,15 @@
  * mode 'editor': 링크 영역·노트 아이콘도 표시(화면 안내용).
  * mode 'export': 링크/노트는 그리지 않는다 — 저장 시 실제 PDF 주석(Annot)으로 들어가기 때문.
  */
-import type { PageObject, TextObj, EditTextObj, StrokeObj, ShapeObj, Rect } from '@core/objects'
+import type { PageObject, TextObj, EditTextObj, StrokeObj, ShapeObj, Rect, BlendMode } from '@core/objects'
+
+/**
+ * 객체의 실효 혼합 모드. 'normal' 이 아니면 백드롭(페이지 픽셀) 위에서 합성해야
+ * 모드별 차이가 실제로 보인다 — 투명 캔버스에 블렌드하면 전부 똑같아 보임.
+ */
+export function effectiveBlend(o: PageObject): BlendMode {
+  return o.type === 'stroke' ? (o.blend ?? (o.kind === 'highlight' ? 'multiply' : 'normal')) : 'normal'
+}
 
 /** 선택 가능한 폰트 (Windows 기본 탑재 위주 — 오버레이 굽기가 캔버스 렌더라 설치된 폰트면 저장도 동일) */
 export const FONT_STACKS: Record<string, string> = {
@@ -33,7 +41,8 @@ export function fontCss(family: string): string {
 
 function drawStroke(ctx: CanvasRenderingContext2D, s: StrokeObj, W: number, H: number): void {
   if (s.points.length === 0) return
-  ctx.globalCompositeOperation = s.kind === 'highlight' ? 'multiply' : 'source-over'
+  const blend = s.blend ?? (s.kind === 'highlight' ? 'multiply' : 'normal')
+  ctx.globalCompositeOperation = blend === 'normal' ? 'source-over' : blend
   ctx.globalAlpha = s.opacity
   ctx.strokeStyle = s.kind === 'whiteout' ? '#ffffff' : s.color
   ctx.lineWidth = Math.max(1, s.width * W)
@@ -44,6 +53,11 @@ function drawStroke(ctx: CanvasRenderingContext2D, s: StrokeObj, W: number, H: n
   ctx.moveTo(x0 * W, y0 * H)
   if (s.points.length === 1) ctx.lineTo(x0 * W + 0.1, y0 * H)
   else for (let i = 1; i < s.points.length; i++) ctx.lineTo(s.points[i][0] * W, s.points[i][1] * H)
+  // 채우기: 경로 내부를 먼저 칠하고 그 위에 선
+  if (s.fill) {
+    ctx.fillStyle = s.fill
+    ctx.fill()
+  }
   ctx.stroke()
   ctx.globalCompositeOperation = 'source-over'
   ctx.globalAlpha = 1

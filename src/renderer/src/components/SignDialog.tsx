@@ -12,12 +12,14 @@ import FormControlLabel from '@mui/material/FormControlLabel'
 import Radio from '@mui/material/Radio'
 import Paper from '@mui/material/Paper'
 import { useEditor } from '@renderer/store/editor'
+import { useT } from '@renderer/i18n'
 import { renderTypedSign, fileToDataUrl, SIGN_FONTS } from '@renderer/editor/stamp'
 
 const INK_COLORS = ['#111111', '#1e88e5', '#5b5bd6']
 
 /** 서명 추가: 그리기 / 이미지 / 타이핑 3탭 (pdfguru와 동일) */
 export default function SignDialog({ open, onClose }: { open: boolean; onClose: () => void }): JSX.Element {
+  const t = useT()
   const setPendingImage = useEditor((s) => s.setPendingImage)
   const setTool = useEditor((s) => s.setTool)
   const savedSigns = useEditor((s) => s.savedSigns)
@@ -101,12 +103,12 @@ export default function SignDialog({ open, onClose }: { open: boolean; onClose: 
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <Box sx={{ px: 3, pt: 2.5, pb: 1 }}>
         <Typography fontWeight={800} sx={{ mb: 1 }}>
-          서명 추가
+          {t('addSign')}
         </Typography>
         <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tab label="그리기" />
-          <Tab label="이미지" />
-          <Tab label="타이핑" />
+          <Tab label={t('draw')} />
+          <Tab label={t('image')} />
+          <Tab label={t('typing')} />
         </Tabs>
       </Box>
 
@@ -153,7 +155,7 @@ export default function SignDialog({ open, onClose }: { open: boolean; onClose: 
             />
             {!hasDrawing && (
               <Typography sx={{ position: 'absolute', bottom: 8, width: '100%', textAlign: 'center', color: 'text.secondary', pointerEvents: 'none' }} variant="body2">
-                여기에 서명하세요
+                {t('signHere')}
               </Typography>
             )}
           </Box>
@@ -166,7 +168,7 @@ export default function SignDialog({ open, onClose }: { open: boolean; onClose: 
             ) : (
               <>
                 <Button variant="outlined" component="label" color="inherit">
-                  이미지 선택
+                  {t('chooseImage')}
                   <input
                     type="file"
                     hidden
@@ -178,7 +180,7 @@ export default function SignDialog({ open, onClose }: { open: boolean; onClose: 
                   />
                 </Button>
                 <Typography variant="body2" color="text.secondary">
-                  서명 이미지를 선택하세요
+                  {t('chooseSignImage')}
                 </Typography>
               </>
             )}
@@ -190,7 +192,7 @@ export default function SignDialog({ open, onClose }: { open: boolean; onClose: 
             <Paper variant="outlined" sx={{ py: 3, textAlign: 'center' }}>
               <Typography sx={{ fontFamily: SIGN_FONTS[fontIdx], fontSize: 40, color }}>{typed || 'Signature'}</Typography>
             </Paper>
-            <TextField size="small" fullWidth autoFocus placeholder="이름 입력" value={typed} onChange={(e) => setTyped(e.target.value)} />
+            <TextField size="small" fullWidth autoFocus placeholder={t('namePlaceholder')} value={typed} onChange={(e) => setTyped(e.target.value)} />
             <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
               {SIGN_FONTS.map((f, i) => (
                 <Paper key={f} variant="outlined" onClick={() => setFontIdx(i)} sx={{ px: 1.5, py: 1, cursor: 'pointer', display: 'flex', alignItems: 'center', borderColor: fontIdx === i ? 'secondary.main' : 'divider' }}>
@@ -205,7 +207,7 @@ export default function SignDialog({ open, onClose }: { open: boolean; onClose: 
         {savedSigns.length > 0 && (
           <Stack direction="row" spacing={1} sx={{ mt: 1.5, overflowX: 'auto' }} alignItems="center">
             <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
-              저장된 서명:
+              {t('savedSigns')}
             </Typography>
             {savedSigns.map((s, i) => (
               <Paper key={i} variant="outlined" sx={{ p: 0.5, cursor: 'pointer', flexShrink: 0 }} onClick={() => {
@@ -221,13 +223,13 @@ export default function SignDialog({ open, onClose }: { open: boolean; onClose: 
       </Box>
 
       <Stack direction="row" alignItems="center" sx={{ px: 3, py: 1.5, borderTop: 1, borderColor: 'divider', mt: 1 }}>
-        <FormControlLabel control={<Checkbox checked={save} onChange={(e) => setSave(e.target.checked)} />} label="서명 저장" />
+        <FormControlLabel control={<Checkbox checked={save} onChange={(e) => setSave(e.target.checked)} />} label={t('saveSign')} />
         <Box sx={{ flex: 1 }} />
         <Button color="inherit" onClick={onClose}>
-          취소
+          {t('cancel')}
         </Button>
         <Button variant="contained" disabled={!canConfirm} onClick={confirm} sx={{ ml: 1 }}>
-          완료
+          {t('done')}
         </Button>
       </Stack>
     </Dialog>

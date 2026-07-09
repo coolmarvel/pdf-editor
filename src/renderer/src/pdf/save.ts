@@ -11,8 +11,8 @@ import { PDFDocument, PDFName, PDFString, PDFHexString, PDFArray, degrees } from
 import type { PDFPage, PDFObject } from 'pdf-lib'
 import type { PageRef } from '@core/pages'
 import type { PageObject, LinkObj, NoteObj } from '@core/objects'
-import { getDocBytes } from './docs'
-import { drawObjects, preloadImage } from '@renderer/editor/draw'
+import { getDocBytes, renderPage } from './docs'
+import { drawObjects, preloadImage, effectiveBlend } from '@renderer/editor/draw'
 
 /** 오버레이 굽기 해상도 (pt → px 배율). 2.5 ≈ 180dpi */
 const BURN_SCALE = 2.5
@@ -31,17 +31,49 @@ function hexToRgb(hex: string): [number, number, number] {
   return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]
 }
 
-async function burnOverlayPng(objects: PageObject[], dw: number, dh: number): Promise<string | null> {
+async function burnOverlayPng(objects: PageObject[], dw: number, dh: number, ref: PageRef): Promise<string | null> {
   const drawable = objects.filter((o) => o.type !== 'link' && o.type !== 'note')
   if (drawable.length === 0) return null
   // 이미지 객체 사전 로드
   await Promise.all(drawable.filter((o) => o.type === 'image').map((o) => preloadImage((o as { dataUrl: string }).dataUrl)))
   const canvas = document.createElement('canvas')
   const scale = Math.min(BURN_SCALE, 4000 / Math.max(dw, dh))
-  canvas.width = Math.round(dw * scale)
-  canvas.height = Math.round(dh * scale)
+  const W = Math.round(dw * scale)
+  const H = Math.round(dh * scale)
+  canvas.width = W
+  canvas.height = H
   const ctx = canvas.getContext('2d')!
-  drawObjects(ctx, drawable, canvas.width, canvas.height, 'export')
+
+  const blended = drawable.some((o) => effectiveBlend(o) !== 'normal')
+  if (!blended) {
+    drawObjects(ctx, drawable, W, H, 'export')
+    return canvas.toDataURL('image/png')
+  }
+
+  // ── 혼합 모드가 있으면 페이지 래스터를 백드롭으로 깔고 블렌드한 뒤,
+  //    객체가 덮는 영역만 남긴다(destination-in) — 그 조각을 원본 벡터 위에 얹으면
+  //    화면과 동일한 블렌드 결과가 되고 나머지 영역은 벡터가 유지된다.
+  const pageCanvas = document.createElement('canvas')
+  await renderPage(ref, pageCanvas, scale)
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, W, H)
+  ctx.drawImage(pageCanvas, 0, 0, W, H)
+  drawObjects(ctx, drawable, W, H, 'export')
+  // 커버리지 마스크 (반투명 객체도 완전히 남도록 알파 증폭 — 굽힌 픽셀에 이미 혼합 결과가 들어있음)
+  const mask = document.createElement('canvas')
+  mask.width = W
+  mask.height = H
+  const mctx = mask.getContext('2d')!
+  drawObjects(mctx, drawable, W, H, 'export')
+  const mi = mctx.getImageData(0, 0, W, H)
+  for (let i = 3; i < mi.data.length; i += 4) {
+    const a = mi.data[i]
+    if (a > 0) mi.data[i] = Math.min(255, a * 3)
+  }
+  mctx.putImageData(mi, 0, 0)
+  ctx.globalCompositeOperation = 'destination-in'
+  ctx.drawImage(mask, 0, 0)
+  ctx.globalCompositeOperation = 'source-over'
   return canvas.toDataURL('image/png')
 }
 
@@ -103,7 +135,7 @@ export async function buildPdf(input: SaveInput): Promise<Uint8Array> {
     }
 
     const objects = input.objectsByPage[ref.id] ?? []
-    const png = await burnOverlayPng(objects, dw, dh)
+    const png = await burnOverlayPng(objects, dw, dh, ref)
     if (png) {
       const img = await out.embedPng(png)
       page.drawImage(img, { x: 0, y: 0, width: dw, height: dh })

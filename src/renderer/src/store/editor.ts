@@ -13,10 +13,11 @@ import {
   duplicatePages,
   rotatePages,
   movePages,
+  movePagesToIndex,
   nudgePages,
-  appendDocument
+  insertDocument
 } from '@core/pages'
-import type { PageObject, ObjectId, DashStyle } from '@core/objects'
+import type { PageObject, ObjectId, DashStyle, BlendMode } from '@core/objects'
 import { newId, rotateObjectCW } from '@core/objects'
 import type { History } from '@core/history'
 import { emptyHistory, push, undo as hUndo, redo as hRedo } from '@core/history'
@@ -61,6 +62,12 @@ export interface PenStyle {
   opacity: number
 }
 
+/** 형광펜: 펜 + 채우기/혼합 모드 (Guru 파리티) */
+export interface HighlightStyle extends PenStyle {
+  fill: string | null
+  blend: BlendMode
+}
+
 export interface ShapeStyle {
   stroke: string
   strokeWidth: number
@@ -87,6 +94,12 @@ interface Snapshot {
 
 export type Phase = 'landing' | 'loading' | 'editor'
 
+export type Lang = 'ko' | 'en'
+/** 페이지 모드: 한 쪽씩 / 두 쪽 나란히 */
+export type PageMode = 'single' | 'double'
+/** 페이지 전환: 이어서 스크롤 / 한 장(쌍)씩 보기 */
+export type PageTransition = 'continuous' | 'paged'
+
 interface EditorState {
   phase: Phase
   loadingProgress: number
@@ -99,7 +112,7 @@ interface EditorState {
   tool: Tool
   textStyle: TextStyle
   penStyle: PenStyle
-  highlightStyle: PenStyle
+  highlightStyle: HighlightStyle
   eraserStyle: EraserStyle
   shapeStyle: ShapeStyle
   /** 저장해 둔 서명 이미지들 (dataUrl) */
@@ -113,6 +126,12 @@ interface EditorState {
   scrollTo: { page: number; nonce: number } | null
   /** px per pt. 0 = 아직 미계산(첫 fit) */
   zoom: number
+  /** UI 언어 (localStorage 유지) */
+  lang: Lang
+  pageMode: PageMode
+  pageTransition: PageTransition
+  /** zoom=0 일 때 어떻게 fit 할지: width = 폭 맞춤(기본 로드), page = 페이지 전체 */
+  fitMode: 'width' | 'page'
   /**
    * 텍스트 수정(Edit Text) 세션 — 도구 활성 동안 변경을 버퍼에 담는다 (pdfguru 동작).
    * 세션 중엔 히스토리가 얼어붙고(undo/redo 비활성), 종료 시 저장(한 단계 커밋)/취소(원복)를 택한다.
@@ -131,7 +150,7 @@ interface EditorState {
   setTool(t: Tool): void
   setTextStyle(p: Partial<TextStyle>): void
   setPenStyle(p: Partial<PenStyle>): void
-  setHighlightStyle(p: Partial<PenStyle>): void
+  setHighlightStyle(p: Partial<HighlightStyle>): void
   setEraserStyle(p: Partial<EraserStyle>): void
   setShapeStyle(p: Partial<ShapeStyle>): void
   addSavedSign(dataUrl: string): void
@@ -148,6 +167,13 @@ interface EditorState {
   setCurrentPage(i: number): void
   requestScrollTo(page: number): void
   setZoom(z: number): void
+  setLang(l: Lang): void
+  setPageMode(m: PageMode): void
+  setPageTransition(t: PageTransition): void
+  /** 페이지가 화면에 통째로 들어오게 재-fit (zoom=0 → PagesView 가 다시 계산) */
+  requestFit(): void
+  /** 드래그 앤 드롭: 페이지 묶음을 index 위치로 이동 */
+  pageMoveToIndex(ids: Set<string>, index: number): void
 
   undo(): void
   redo(): void
@@ -170,7 +196,8 @@ interface EditorState {
   pageRotate(ids: Set<string>, delta: 90 | -90): void
   pageMove(ids: Set<string>, targetId: string, where: 'before' | 'after'): void
   pageNudge(ids: Set<string>, dir: -1 | 1): void
-  pageImport(bytes: Uint8Array): Promise<void>
+  /** PDF 가져오기. index 지정 시 그 위치 앞에 삽입, 없으면 끝에 */
+  pageImport(bytes: Uint8Array, index?: number): Promise<void>
 }
 
 const DEFAULT_TEXT: TextStyle = {
@@ -236,8 +263,8 @@ export const useEditor = create<EditorState>()((set, get) => {
     tool: 'select',
     textStyle: DEFAULT_TEXT,
     penStyle: { color: '#2563eb', width: 0.004, opacity: 1 },
-    highlightStyle: { color: '#facc15', width: 0.025, opacity: 0.45 },
-    eraserStyle: { kind: 'rect', stroke: '#ffffff', strokeWidth: 0.002, fill: '#ffffff', opacity: 1, dash: 'solid' },
+    highlightStyle: { color: '#facc15', width: 0.025, opacity: 0.45, fill: null, blend: 'multiply' },
+    eraserStyle: { kind: 'rect', stroke: '#ffffff', strokeWidth: 5 / 595, fill: '#ffffff', opacity: 1, dash: 'solid' }, // 5pt (Guru 기본)
     shapeStyle: { stroke: '#2563eb', strokeWidth: 0.004, fill: null, opacity: 1, dash: 'solid' },
     savedSigns: [],
     selected: null,
@@ -245,6 +272,10 @@ export const useEditor = create<EditorState>()((set, get) => {
     currentPage: 0,
     scrollTo: null,
     zoom: 0,
+    lang: (localStorage.getItem('lang') as Lang) === 'en' ? 'en' : 'ko',
+    pageMode: 'single',
+    pageTransition: 'continuous',
+    fitMode: 'width',
     editTextSnapshot: null,
     editTextExitPrompt: null,
     deletePrompt: null,
@@ -254,7 +285,7 @@ export const useEditor = create<EditorState>()((set, get) => {
       const { docId, pageCount } = await registerDoc(bytes)
       onProgress?.(30)
       set({ loadingProgress: 30 })
-      const pages = appendDocument([], docId, pageCount)
+      const pages = insertDocument([], docId, pageCount, 0)
       const displaySizes: Record<string, { w: number; h: number }> = {}
       for (let i = 0; i < pages.length; i++) {
         displaySizes[pages[i].id] = await getDisplaySize(pages[i])
@@ -366,6 +397,17 @@ export const useEditor = create<EditorState>()((set, get) => {
     setCurrentPage: (currentPage) => set({ currentPage }),
     requestScrollTo: (page) => set({ scrollTo: { page, nonce: Date.now() }, currentPage: page }),
     setZoom: (zoom) => set({ zoom: Math.min(4, Math.max(0.2, zoom)) }),
+    setLang(lang) {
+      localStorage.setItem('lang', lang)
+      set({ lang })
+    },
+    setPageMode: (pageMode) => set({ pageMode, zoom: 0, fitMode: 'width' }), // 모드 바뀌면 폭 기준 재-fit
+    setPageTransition: (pageTransition) => set({ pageTransition }),
+    requestFit: () => set({ zoom: 0, fitMode: 'page' }), // "화면에 맞춤" = 페이지 전체가 보이게
+    pageMoveToIndex(ids, index) {
+      const s = get()
+      commit({ pages: movePagesToIndex(s.pages, ids, index) })
+    },
 
     undo() {
       const s = get()
@@ -500,12 +542,13 @@ export const useEditor = create<EditorState>()((set, get) => {
       commit({ pages: nudgePages(s.pages, ids, dir) })
     },
 
-    async pageImport(bytes) {
+    async pageImport(bytes, index) {
       const { docId, pageCount } = await registerDoc(bytes)
       const s = get()
-      const pages = appendDocument(s.pages, docId, pageCount)
+      const at = index ?? s.pages.length
+      const pages = insertDocument(s.pages, docId, pageCount, at)
       const displaySizes = { ...s.displaySizes }
-      for (const p of pages.slice(s.pages.length)) {
+      for (const p of pages.slice(at, at + pageCount)) {
         displaySizes[p.id] = await getDisplaySize(p)
       }
       commit({ pages, displaySizes })

@@ -50,7 +50,7 @@ async function main() {
   const page1 = win.locator('[data-page-index]').first()
   const box = await page1.boundingBox()
   const cx = box.x + box.width * 0.5
-  const cy = box.y + box.height * 0.55
+  const cy = box.y + box.height * 0.3 // 폭 맞춤 기본 배율에서 뷰포트 안쪽
   await win.mouse.click(cx, cy)
   await win.waitForTimeout(300)
   await win.screenshot({ path: path.join(OUT, '02-empty-input.png') })
@@ -249,7 +249,15 @@ async function main() {
   await win.mouse.move(pb.x + pb.width * 0.55, pb.y + pb.height * 0.35, { steps: 8 })
   await win.mouse.up()
   await win.waitForTimeout(200)
-  await win.click('button:has-text("지우개")')
+  // 스플릿 버튼: 메뉴는 ⌄ 화살표로 연다
+  const openEraserMenu = () =>
+    win.evaluate(() => {
+      const btn = [...document.querySelectorAll('button')].find((b) => b.textContent.includes('지우개'))
+      const row = btn.closest('span').parentElement
+      const arrow = [...row.children].filter((el) => el.tagName === 'BUTTON').pop()
+      arrow.click()
+    })
+  await openEraserMenu()
   await win.waitForTimeout(300)
   await win.click('li:has-text("그리기 지우개")')
   await win.waitForTimeout(500) // MUI 메뉴 백드롭이 닫힐 때까지 (포인터 삼킴 방지)
@@ -274,9 +282,9 @@ async function main() {
   console.log('cursor after erase-all is default:', curAfter === 'default')
 
   // 지우개(도형 덮기): "Sample page 1" 위를 드래그 → 흰 사각형으로 덮임
-  await win.mouse.click(pb.x + pb.width * 0.8, pb.y + pb.height * 0.8) // 잔여 상태 정리
+  await win.mouse.click(pb.x + pb.width * 0.85, pb.y + pb.height * 0.45) // 잔여 상태 정리 (뷰포트 안 빈 곳)
   await win.waitForTimeout(200)
-  await win.click('button:has-text("지우개")')
+  await openEraserMenu()
   await win.waitForTimeout(300)
   await win.click('li:has-text("지우개")') // 첫 항목 = 도형 덮기 지우개
   await win.waitForTimeout(500)

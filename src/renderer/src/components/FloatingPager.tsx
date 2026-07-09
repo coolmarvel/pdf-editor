@@ -8,9 +8,11 @@ import ZoomInRounded from '@mui/icons-material/ZoomInRounded'
 import ZoomOutRounded from '@mui/icons-material/ZoomOutRounded'
 import PanToolRounded from '@mui/icons-material/PanToolRounded'
 import { useEditor } from '@renderer/store/editor'
+import { useT } from '@renderer/i18n'
 
 /** 하단 중앙 플로팅 페이저 (pdfguru의 다크 필) */
 export default function FloatingPager(): JSX.Element {
+  const t = useT()
   const pages = useEditor((s) => s.pages)
   const currentPage = useEditor((s) => s.currentPage)
   const requestScrollTo = useEditor((s) => s.requestScrollTo)
@@ -18,6 +20,10 @@ export default function FloatingPager(): JSX.Element {
   const setZoom = useEditor((s) => s.setZoom)
   const tool = useEditor((s) => s.tool)
   const setTool = useEditor((s) => s.setTool)
+  const pageMode = useEditor((s) => s.pageMode)
+  const pageTransition = useEditor((s) => s.pageTransition)
+  // 두 쪽 + 한 장씩 보기에선 한 번에 두 페이지씩 넘긴다
+  const step = pageMode === 'double' && pageTransition === 'paged' ? 2 : 1
 
   const iconSx = { color: '#fff' }
   return (
@@ -30,7 +36,7 @@ export default function FloatingPager(): JSX.Element {
         right: 0,
         mx: 'auto',
         width: 'fit-content',
-        bgcolor: 'rgba(30,36,50,.92)',
+        bgcolor: 'rgba(29,41,57,.95)' /* gray-800 */,
         borderRadius: 99,
         px: 2.5,
         py: 0.6,
@@ -42,27 +48,27 @@ export default function FloatingPager(): JSX.Element {
         zIndex: 20
       }}
     >
-      <Typography sx={{ color: '#cfd6e4', mr: 1, fontSize: 15, whiteSpace: 'nowrap', flexShrink: 0 }}>페이지:</Typography>
-      <IconButton size="small" sx={iconSx} disabled={currentPage <= 0} onClick={() => requestScrollTo(currentPage - 1)}>
+      <Typography sx={{ color: '#cfd6e4', mr: 1, fontSize: 15, whiteSpace: 'nowrap', flexShrink: 0 }}>{t('pageLabel')}</Typography>
+      <IconButton size="small" sx={iconSx} disabled={currentPage <= 0} onClick={() => requestScrollTo(Math.max(0, currentPage - step))}>
         <KeyboardArrowUpRounded />
       </IconButton>
       <Typography sx={{ color: '#fff', mx: 0.5, fontSize: 16, whiteSpace: 'nowrap', flexShrink: 0 }} fontWeight={700}>
         {Math.min(currentPage + 1, pages.length)}/{pages.length}
       </Typography>
-      <IconButton size="small" sx={iconSx} disabled={currentPage >= pages.length - 1} onClick={() => requestScrollTo(currentPage + 1)}>
+      <IconButton size="small" sx={iconSx} disabled={currentPage >= pages.length - 1} onClick={() => requestScrollTo(Math.min(pages.length - 1, currentPage + step))}>
         <KeyboardArrowDownRounded />
       </IconButton>
-      <Tooltip title="확대">
+      <Tooltip title={t('zoomIn')}>
         <IconButton size="small" sx={iconSx} onClick={() => setZoom(zoom * 1.2)}>
           <ZoomInRounded />
         </IconButton>
       </Tooltip>
-      <Tooltip title="축소">
+      <Tooltip title={t('zoomOut')}>
         <IconButton size="small" sx={iconSx} onClick={() => setZoom(zoom / 1.2)}>
           <ZoomOutRounded />
         </IconButton>
       </Tooltip>
-      <Tooltip title="손 도구 (드래그로 이동)">
+      <Tooltip title={t('handTool')}>
         <IconButton size="small" sx={{ ...iconSx, bgcolor: tool === 'hand' ? 'rgba(255,255,255,.25)' : undefined }} onClick={() => setTool(tool === 'hand' ? 'select' : 'hand')}>
           <PanToolRounded fontSize="small" />
         </IconButton>

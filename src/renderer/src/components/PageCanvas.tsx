@@ -13,8 +13,9 @@ import type { PageRef } from '@core/pages'
 import type { PageObject, StrokeObj, TextObj, EditTextObj, LinkObj, NoteObj, Rect } from '@core/objects'
 import { newId, hitTest, textBoxRect, textContentHeight, rectsOverlap } from '@core/objects'
 import { renderPage, extractTextSpans, type TextSpan } from '@renderer/pdf/docs'
-import { drawObjects, preloadImage, fontCss, measureTextWidthPx } from '@renderer/editor/draw'
+import { drawObjects, preloadImage, fontCss, measureTextWidthPx, effectiveBlend } from '@renderer/editor/draw'
 import { useEditor } from '@renderer/store/editor'
+import { useT } from '@renderer/i18n'
 
 interface Props {
   page: PageRef
@@ -70,6 +71,7 @@ const ERASE_CURSOR = `-webkit-image-set(${eraseCursorSvg(24)} 1x, ${eraseCursorS
 
 /** 페이지 1장 = PDF 캔버스 + 객체 오버레이 + 인터랙션 레이어 */
 export default function PageCanvas({ page, zoom }: Props): JSX.Element {
+  const t = useT()
   const displaySizes = useEditor((s) => s.displaySizes)
   const objects = useEditor((s) => s.objectsByPage[page.id] ?? EMPTY)
   const tool = useEditor((s) => s.tool)
@@ -131,7 +133,8 @@ export default function PageCanvas({ page, zoom }: Props): JSX.Element {
   useEffect(() => {
     if (!visible || !baseRef.current || zoom <= 0) return
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
-    void renderPage(page, baseRef.current, zoom * dpr)
+    // 렌더 완료 후 오버레이 재그리기 — 혼합 모드 백드롭이 빈 페이지로 굳지 않게
+    void renderPage(page, baseRef.current, zoom * dpr).then(() => bump())
   }, [visible, page, page.extraRotation, zoom])
 
   // ── 오버레이 렌더 ──
@@ -153,15 +156,22 @@ export default function PageCanvas({ page, zoom }: Props): JSX.Element {
       if (o.id !== editing?.objectId) return [o]
       return o.type === 'editText' ? [{ ...o, text: '' } as PageObject] : []
     })
-    drawObjects(ctx, draw, canvas.width, canvas.height, 'editor')
     // 진행 중 드래그(펜 선/도형)의 미리보기
     const d = dragRef.current
-    if (d?.kind === 'draw' && d.points) {
-      const s = transientStroke(d.points)
-      drawObjects(ctx, [s], canvas.width, canvas.height, 'editor')
+    const previews: PageObject[] = []
+    if (d?.kind === 'draw' && d.points) previews.push(transientStroke(d.points))
+    if (d?.kind === 'shape' && d.rect) previews.push(transientShape(d.rect))
+    // 혼합 모드(multiply 등)는 페이지 픽셀을 백드롭으로 깔아야 실제로 섞인다
+    // (투명 캔버스에 블렌드하면 모드 불문 동일하게 보임)
+    const needBackdrop = [...draw, ...previews].some((o) => effectiveBlend(o) !== 'normal')
+    if (needBackdrop && baseRef.current && baseRef.current.width > 0) {
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      ctx.drawImage(baseRef.current, 0, 0, canvas.width, canvas.height)
     }
-    if (d?.kind === 'shape' && d.rect) {
-      drawObjects(ctx, [transientShape(d.rect)], canvas.width, canvas.height, 'editor')
+    drawObjects(ctx, draw, canvas.width, canvas.height, 'editor')
+    if (previews.length > 0) {
+      drawObjects(ctx, previews, canvas.width, canvas.height, 'editor')
     }
     if (d?.kind === 'link' && d.rect) {
       ctx.strokeStyle = '#3b82f6'
@@ -176,15 +186,26 @@ export default function PageCanvas({ page, zoom }: Props): JSX.Element {
   })
 
   function transientStroke(points: [number, number][]): StrokeObj {
-    const kind = tool === 'highlight' ? 'highlight' : 'pencil'
-    const style = tool === 'highlight' ? highlightStyle : penStyle
+    if (tool === 'highlight') {
+      return {
+        id: 'transient',
+        type: 'stroke',
+        kind: 'highlight',
+        color: highlightStyle.color,
+        width: highlightStyle.width,
+        opacity: highlightStyle.opacity,
+        fill: highlightStyle.fill,
+        blend: highlightStyle.blend,
+        points
+      }
+    }
     return {
       id: 'transient',
       type: 'stroke',
-      kind,
-      color: style.color,
-      width: style.width,
-      opacity: style.opacity,
+      kind: 'pencil',
+      color: penStyle.color,
+      width: penStyle.width,
+      opacity: penStyle.opacity,
       points
     }
   }
@@ -792,7 +813,9 @@ export default function PageCanvas({ page, zoom }: Props): JSX.Element {
             ? hasStrokes
               ? ERASE_CURSOR // 낙서가 있어야 지우개 원이 뜬다 (없으면 기본 커서)
               : 'default'
-            : 'crosshair'
+            : tool === 'highlight'
+              ? ERASE_CURSOR // 형광펜도 빈 원 브러시 커서 (사용자 요청)
+              : 'crosshair'
 
   const noteObj = notePop ? (objects.find((o) => o.id === notePop.objectId) as NoteObj | undefined) : undefined
   const linkObj = linkPop ? (objects.find((o) => o.id === linkPop.objectId) as LinkObj | undefined) : undefined
@@ -801,7 +824,7 @@ export default function PageCanvas({ page, zoom }: Props): JSX.Element {
     <Box
       ref={boxRef}
       data-page-index
-      sx={{ position: 'relative', width: cssW, height: cssH, bgcolor: '#fff', boxShadow: 2, flexShrink: 0, mx: 'auto' }}
+      sx={{ position: 'relative', width: cssW, height: cssH, bgcolor: '#fff', boxShadow: 2, flexShrink: 0 }}
     >
       <canvas ref={baseRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
       <canvas ref={overlayRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
@@ -851,7 +874,7 @@ export default function PageCanvas({ page, zoom }: Props): JSX.Element {
               {selObj?.type === 'text' && (
                 <>
                   <Box sx={{ position: 'absolute', left: '50%', top: '100%', width: '1.5px', height: 20, bgcolor: SEL_BLUE, transform: 'translateX(-50%)' }} />
-                  <Tooltip title="회전" placement="bottom" arrow>
+                  <Tooltip title={t('rotateHandle')} placement="bottom" arrow>
                     <Box
                       onPointerDown={(e) => onHandleDown(e, 'rotate')}
                       onPointerMove={onHandleMove}
@@ -1002,7 +1025,7 @@ export default function PageCanvas({ page, zoom }: Props): JSX.Element {
       >
         <Box sx={{ p: 1.5, width: 260, bgcolor: noteObj?.color ?? '#facc15' }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-            <strong style={{ fontSize: 13 }}>노트</strong>
+            <strong style={{ fontSize: 13 }}>{t('noteTitle')}</strong>
             <IconButton
               size="small"
               onClick={() => {
@@ -1019,7 +1042,7 @@ export default function PageCanvas({ page, zoom }: Props): JSX.Element {
             fullWidth
             autoFocus
             variant="standard"
-            placeholder="메모 입력…"
+            placeholder={t('notePlaceholder')}
             defaultValue={noteObj?.text ?? ''}
             onBlur={(e) => {
               if (notePop) updateObject(page.id, notePop.objectId, { text: e.target.value })
@@ -1038,16 +1061,16 @@ export default function PageCanvas({ page, zoom }: Props): JSX.Element {
       >
         <Box sx={{ p: 2, width: 300 }}>
           <Stack spacing={1.5}>
-            <strong style={{ fontSize: 13 }}>링크 설정</strong>
+            <strong style={{ fontSize: 13 }}>{t('linkSettings')}</strong>
             <ToggleButtonGroup size="small" exclusive value={linkKind} onChange={(_, v) => v && setLinkKind(v)} fullWidth>
-              <ToggleButton value="url">웹사이트</ToggleButton>
-              <ToggleButton value="page">페이지</ToggleButton>
+              <ToggleButton value="url">{t('website')}</ToggleButton>
+              <ToggleButton value="page">{t('pages')}</ToggleButton>
             </ToggleButtonGroup>
             <TextField
               size="small"
               autoFocus
               fullWidth
-              placeholder={linkKind === 'url' ? 'www.example.com' : '페이지 번호'}
+              placeholder={linkKind === 'url' ? 'www.example.com' : t('pageNo')}
               type={linkKind === 'page' ? 'number' : 'text'}
               value={linkValue}
               onChange={(e) => setLinkValue(e.target.value)}
@@ -1063,7 +1086,7 @@ export default function PageCanvas({ page, zoom }: Props): JSX.Element {
                   setLinkPop(null)
                 }}
               >
-                취소
+                {t('cancel')}
               </Button>
               <Button
                 size="small"
@@ -1078,7 +1101,7 @@ export default function PageCanvas({ page, zoom }: Props): JSX.Element {
                   setLinkPop(null)
                 }}
               >
-                적용
+                {t('apply')}
               </Button>
             </Stack>
           </Stack>

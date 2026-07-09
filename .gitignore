@@ -13,3 +13,6 @@ pdf-guru-screenshots/*.png
 
 # 루트에 임시로 놓이는 피드백 스크린샷
 /스크린샷*.png
+
+# TailAdmin 디자인 레퍼런스 (커밋 금지)
+tailadmin-nextjs-pro-225/

@@ -10,9 +10,11 @@ import FormControlLabel from '@mui/material/FormControlLabel'
 import Paper from '@mui/material/Paper'
 import { PRESET_STAMPS, CUSTOM_STAMP_COLORS, renderStamp, type StampSpec } from '@renderer/editor/stamp'
 import { useEditor } from '@renderer/store/editor'
+import { useT } from '@renderer/i18n'
 
 /** 스탬프 선택/제작: 프리셋 그리드 ↔ 커스텀 빌더 (pdfguru와 동일 구성) */
 export default function StampDialog({ open, onClose }: { open: boolean; onClose: () => void }): JSX.Element {
+  const t = useT()
   const setPendingImage = useEditor((s) => s.setPendingImage)
   const setTool = useEditor((s) => s.setTool)
   const [custom, setCustom] = useState(false)
@@ -44,9 +46,9 @@ export default function StampDialog({ open, onClose }: { open: boolean; onClose:
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <Box sx={{ p: 2.5 }}>
         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-          <Typography fontWeight={800}>{custom ? '커스텀 스탬프' : '기본 스탬프 사용'}</Typography>
+          <Typography fontWeight={800}>{custom ? t('customStamp') : t('presetStamp')}</Typography>
           <Button size="small" variant="outlined" color="secondary" onClick={() => setCustom(!custom)}>
-            {custom ? '기본 스탬프 사용' : '커스텀 스탬프'}
+            {custom ? t('presetStamp') : t('customStamp')}
           </Button>
         </Stack>
 
@@ -75,23 +77,23 @@ export default function StampDialog({ open, onClose }: { open: boolean; onClose:
                 )}
               </Box>
             </Paper>
-            <TextField label="스탬프 텍스트" size="small" fullWidth value={text} onChange={(e) => setText(e.target.value)} autoFocus />
+            <TextField label={t('stampText')} size="small" fullWidth value={text} onChange={(e) => setText(e.target.value)} autoFocus />
             <Stack direction="row" spacing={2}>
-              <FormControlLabel control={<Checkbox checked={withDate} onChange={(e) => setWithDate(e.target.checked)} />} label="날짜" />
-              <FormControlLabel control={<Checkbox checked={withTime} onChange={(e) => setWithTime(e.target.checked)} />} label="시간" />
+              <FormControlLabel control={<Checkbox checked={withDate} onChange={(e) => setWithDate(e.target.checked)} />} label={t('date')} />
+              <FormControlLabel control={<Checkbox checked={withTime} onChange={(e) => setWithTime(e.target.checked)} />} label={t('time')} />
             </Stack>
             <Stack direction="row" spacing={1} alignItems="center">
-              <Typography variant="body2">색상</Typography>
+              <Typography variant="body2">{t('color')}</Typography>
               {CUSTOM_STAMP_COLORS.map((cc, i) => (
                 <Box key={cc.color} onClick={() => setColorIdx(i)} sx={{ width: 24, height: 24, borderRadius: '50%', bgcolor: cc.color, cursor: 'pointer', border: i === colorIdx ? '3px solid #1f2430' : '3px solid transparent' }} />
               ))}
             </Stack>
             <Stack direction="row" spacing={1} justifyContent="flex-end">
               <Button color="inherit" onClick={onClose}>
-                취소
+                {t('cancel')}
               </Button>
               <Button variant="contained" color="secondary" disabled={!text.trim()} onClick={() => pick(customSpec)}>
-                스탬프 만들기
+                {t('makeStamp')}
               </Button>
             </Stack>
           </Stack>
@@ -100,7 +102,7 @@ export default function StampDialog({ open, onClose }: { open: boolean; onClose:
         {!custom && (
           <Stack direction="row" justifyContent="flex-end" sx={{ mt: 2 }}>
             <Button color="inherit" onClick={onClose}>
-              취소
+              {t('cancel')}
             </Button>
           </Stack>
         )}

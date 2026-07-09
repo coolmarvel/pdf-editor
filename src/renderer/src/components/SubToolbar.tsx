@@ -22,26 +22,109 @@ import VerticalAlignBottomRounded from '@mui/icons-material/VerticalAlignBottomR
 import DeleteOutlineRounded from '@mui/icons-material/DeleteOutlineRounded'
 import AddRounded from '@mui/icons-material/AddRounded'
 import ArrowDropDownRounded from '@mui/icons-material/ArrowDropDownRounded'
-import OpacityRounded from '@mui/icons-material/OpacityRounded'
+import FormatColorTextRounded from '@mui/icons-material/FormatColorTextRounded'
+import FormatColorFillRounded from '@mui/icons-material/FormatColorFillRounded'
+import BorderColorRounded from '@mui/icons-material/BorderColorRounded'
+import ContrastRounded from '@mui/icons-material/ContrastRounded'
+import LineWeightRounded from '@mui/icons-material/LineWeightRounded'
+import LineStyleRounded from '@mui/icons-material/LineStyleRounded'
+import LayersRounded from '@mui/icons-material/LayersRounded'
+import TextFieldsRounded from '@mui/icons-material/TextFieldsRounded'
 import { useEditor, type TextStyle } from '@renderer/store/editor'
-import type { PageObject, TextObj, EditTextObj, ShapeObj, NoteObj, DashStyle } from '@core/objects'
+import type { PageObject, TextObj, EditTextObj, ShapeObj, NoteObj, StrokeObj, DashStyle, BlendMode } from '@core/objects'
 import { FONT_STACKS, measureTextWidthPx } from '@renderer/editor/draw'
+import { useT, type I18nKey } from '@renderer/i18n'
+import { ui } from '@renderer/theme'
 
-/** 테두리 선 스타일 선택 — 각 항목을 실제 선 모양으로 표시 */
+/**
+ * 컨텍스트 바 (Guru 문법): 컨트롤마다 [의미 아이콘] + [36px 통일 높이 박스] 로 묶고
+ * 그룹 사이는 세로 구분선. 어떤 도구든 같은 규칙으로 읽힌다.
+ */
+
+/** 그룹: 회색 의미 아이콘 + 컨트롤 (아이콘에 툴팁) */
+function Group({ icon, tooltip, children }: { icon?: React.ReactNode; tooltip?: string; children: React.ReactNode }): JSX.Element {
+  const iconBox = icon ? <Box sx={{ display: 'flex', color: ui.gray[500], '& svg': { fontSize: 20 } }}>{icon}</Box> : null
+  return (
+    <Stack direction="row" alignItems="center" spacing={0.7} sx={{ flexShrink: 0 }}>
+      {iconBox && (tooltip ? <Tooltip title={tooltip}>{iconBox}</Tooltip> : iconBox)}
+      {children}
+    </Stack>
+  )
+}
+
+function GDivider(): JSX.Element {
+  return <Divider orientation="vertical" flexItem sx={{ my: 1 }} />
+}
+
+/** 통일된 컨트롤 높이 (Guru 36px) */
+const CTL_H = 36
+const selectSx = {
+  height: CTL_H,
+  bgcolor: '#fff',
+  '& .MuiSelect-select': { py: 0.5, display: 'flex', alignItems: 'center' }
+} as const
+
+/** 박스형 트리거 버튼 공통 스타일 (팔레트/불투명도) */
+const boxBtnSx = {
+  height: CTL_H,
+  px: 0.8,
+  borderRadius: 2,
+  border: `1px solid ${ui.gray[300]}`,
+  bgcolor: '#fff',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 0.3,
+  boxShadow: ui.shadow.xs,
+  '&:hover': { bgcolor: ui.gray[50] }
+} as const
+
+/** 혼합 모드 (캔버스 globalCompositeOperation 과 1:1, Guru 목록 동일) */
+const BLEND_MODES: { v: BlendMode; label: string }[] = [
+  { v: 'normal', label: 'Normal' },
+  { v: 'multiply', label: 'Multiply' },
+  { v: 'screen', label: 'Screen' },
+  { v: 'overlay', label: 'Overlay' },
+  { v: 'darken', label: 'Darken' },
+  { v: 'lighten', label: 'Lighten' },
+  { v: 'color-dodge', label: 'Color Dodge' },
+  { v: 'color-burn', label: 'Color Burn' },
+  { v: 'hard-light', label: 'Hard Light' },
+  { v: 'soft-light', label: 'Soft Light' },
+  { v: 'difference', label: 'Difference' },
+  { v: 'exclusion', label: 'Exclusion' }
+]
+
+function BlendSelect({ value, onChange }: { value: BlendMode; onChange: (b: BlendMode) => void }): JSX.Element {
+  const t = useT()
+  return (
+    <Group icon={<LayersRounded />} tooltip={t('blendMode')}>
+      <Select size="small" value={value} onChange={(e) => onChange(e.target.value as BlendMode)} sx={{ ...selectSx, minWidth: 118 }} MenuProps={{ PaperProps: { sx: { maxHeight: 380 } } }}>
+        {BLEND_MODES.map((b) => (
+          <MenuItem key={b.v} value={b.v}>
+            {b.label}
+          </MenuItem>
+        ))}
+      </Select>
+    </Group>
+  )
+}
+
+/** 테두리 선 스타일 — 항목을 실제 선 모양으로 표시 */
 function DashSelect({ value, onChange }: { value: DashStyle; onChange: (d: DashStyle) => void }): JSX.Element {
+  const t = useT()
   const sample = (d: DashStyle): JSX.Element => (
-    <Box sx={{ width: 44, borderTop: `2.5px ${d === 'solid' ? 'solid' : d === 'dotted' ? 'dotted' : 'dashed'} #1f2430`, my: '9px' }} />
+    <Box sx={{ width: 40, borderTop: `2.5px ${d === 'solid' ? 'solid' : d === 'dotted' ? 'dotted' : 'dashed'} ${ui.gray[800]}`, my: '9px' }} />
   )
   return (
-    <Tooltip title="테두리 스타일">
-      <Select size="small" value={value} onChange={(e) => onChange(e.target.value as DashStyle)} sx={{ '& .MuiSelect-select': { py: 0.4, display: 'flex', alignItems: 'center' } }}>
+    <Group icon={<LineStyleRounded />} tooltip={t('borderStyle')}>
+      <Select size="small" value={value} onChange={(e) => onChange(e.target.value as DashStyle)} sx={selectSx}>
         {(['solid', 'dotted', 'dashed'] as const).map((d) => (
           <MenuItem key={d} value={d}>
             {sample(d)}
           </MenuItem>
         ))}
       </Select>
-    </Tooltip>
+    </Group>
   )
 }
 
@@ -53,6 +136,23 @@ const widthToPt = (w: number): number => Math.round(w * 595)
 
 const FONT_SIZES = [8, 10, 12, 14, 16, 18, 24, 32, 40, 56, 72]
 const PEN_WIDTHS = [1, 2, 3, 5, 8, 12, 18, 30]
+
+/** 선 굵기 셀렉트 (≡ 아이콘 + pt 목록, 현재 값 포함 보장) */
+function WidthSelect({ value, onChange, list = PEN_WIDTHS }: { value: number; onChange: (w: number) => void; list?: number[] }): JSX.Element {
+  const t = useT()
+  const pt = widthToPt(value)
+  return (
+    <Group icon={<LineWeightRounded />} tooltip={t('thickness')}>
+      <Select size="small" value={pt} onChange={(e) => onChange(ptToWidth(Number(e.target.value)))} sx={{ ...selectSx, minWidth: 78 }}>
+        {[...new Set([...list, pt])].sort((a, b) => a - b).map((p) => (
+          <MenuItem key={p} value={p}>
+            {p} pt
+          </MenuItem>
+        ))}
+      </Select>
+    </Group>
+  )
+}
 
 /** pdfguru 스타일 프리셋 팔레트 (진한 6 / 파스텔 6 / 무채색 5) */
 const PALETTE: string[][] = [
@@ -70,7 +170,7 @@ function Swatch({ color, selected, onClick }: { color: string; selected: boolean
         height: 24,
         borderRadius: '50%',
         bgcolor: color,
-        border: color.toLowerCase() === '#ffffff' ? '1px solid #d7dae0' : '1px solid rgba(0,0,0,.08)',
+        border: color.toLowerCase() === '#ffffff' ? `1px solid ${ui.gray[300]}` : '1px solid rgba(0,0,0,.08)',
         outline: selected ? '2px solid #3b82f6' : 'none',
         outlineOffset: 1
       }}
@@ -78,34 +178,30 @@ function Swatch({ color, selected, onClick }: { color: string; selected: boolean
   )
 }
 
-/** "없음" 스와치 (빨간 사선 원) */
-function NoneSwatch({ selected, onClick }: { selected: boolean; onClick: () => void }): JSX.Element {
-  return (
-    <ButtonBase
-      onClick={onClick}
-      sx={{
-        width: 24,
-        height: 24,
-        borderRadius: '50%',
-        border: '1px solid #d7dae0',
-        outline: selected ? '2px solid #3b82f6' : 'none',
-        outlineOffset: 1,
-        position: 'relative',
-        overflow: 'hidden',
-        bgcolor: '#fff',
-        '&::after': {
-          content: '""',
-          position: 'absolute',
-          left: -3,
-          right: -3,
-          top: '50%',
-          height: 2,
-          bgcolor: '#e0343f',
-          transform: 'rotate(-45deg)'
-        }
-      }}
-    />
-  )
+/** "없음" 표시 (빨간 사선 원) — onClick 있으면 버튼 */
+function NoneSwatch({ selected, onClick, size = 24 }: { selected?: boolean; onClick?: () => void; size?: number }): JSX.Element {
+  const sx = {
+    width: size,
+    height: size,
+    borderRadius: '50%',
+    border: `1px solid ${ui.gray[300]}`,
+    outline: selected ? '2px solid #3b82f6' : 'none',
+    outlineOffset: 1,
+    position: 'relative',
+    overflow: 'hidden',
+    bgcolor: '#fff',
+    '&::after': {
+      content: '""',
+      position: 'absolute',
+      left: -3,
+      right: -3,
+      top: '50%',
+      height: 2,
+      bgcolor: '#e0343f',
+      transform: 'rotate(-45deg)'
+    }
+  } as const
+  return onClick ? <ButtonBase onClick={onClick} sx={sx} /> : <Box sx={sx} />
 }
 
 interface PaletteControlProps {
@@ -113,31 +209,24 @@ interface PaletteControlProps {
   onChange: (c: string | null) => void
   allowNone?: boolean
   title: string
-  label?: string
+  icon?: React.ReactNode
 }
 
-/** 색 원 버튼 → 팔레트 팝오버 (프리셋 + Custom) */
-function PaletteControl({ value, onChange, allowNone, title, label }: PaletteControlProps): JSX.Element {
+/** [아이콘] + 박스형 색 버튼(스와치+⌄) → 팔레트 팝오버 (Guru 스타일) */
+function PaletteControl({ value, onChange, allowNone, title, icon }: PaletteControlProps): JSX.Element {
+  const t = useT()
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   const customRef = useRef<HTMLInputElement>(null)
   return (
-    <>
+    <Group icon={icon} tooltip={title}>
       <Tooltip title={title}>
-        <ButtonBase
-          onClick={(e) => setAnchor(e.currentTarget)}
-          sx={{ borderRadius: 99, px: 0.4, py: 0.2, display: 'flex', alignItems: 'center', gap: 0.3, '&:hover': { bgcolor: '#f1f2f4' } }}
-        >
-          {label && (
-            <Typography variant="caption" color="text.secondary">
-              {label}
-            </Typography>
-          )}
+        <ButtonBase onClick={(e) => setAnchor(e.currentTarget)} sx={boxBtnSx}>
           {value ? (
-            <Box sx={{ width: 22, height: 22, borderRadius: '50%', bgcolor: value, border: value.toLowerCase() === '#ffffff' ? '1.5px solid #d7dae0' : '1.5px solid rgba(0,0,0,.1)' }} />
+            <Box sx={{ width: 18, height: 18, borderRadius: '50%', bgcolor: value, border: value.toLowerCase() === '#ffffff' ? `1.5px solid ${ui.gray[300]}` : '1.5px solid rgba(0,0,0,.1)' }} />
           ) : (
-            <Box sx={{ width: 22, height: 22, borderRadius: '50%', border: '1.5px solid #d7dae0', position: 'relative', overflow: 'hidden', bgcolor: '#fff', '&::after': { content: '""', position: 'absolute', left: -3, right: -3, top: '50%', height: 2, bgcolor: '#e0343f', transform: 'rotate(-45deg)' } }} />
+            <NoneSwatch size={18} />
           )}
-          <ArrowDropDownRounded sx={{ fontSize: 16, ml: -0.4, color: 'text.secondary' }} />
+          <ArrowDropDownRounded sx={{ fontSize: 18, color: ui.gray[500] }} />
         </ButtonBase>
       </Tooltip>
       <Popover open={!!anchor} anchorEl={anchor} onClose={() => setAnchor(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}>
@@ -152,12 +241,12 @@ function PaletteControl({ value, onChange, allowNone, title, label }: PaletteCon
               </Stack>
             ))}
             <Typography variant="caption" color="text.secondary" sx={{ pt: 0.5 }}>
-              직접 선택
+              {t('customColor')}
             </Typography>
             <Box>
               <ButtonBase
                 onClick={() => customRef.current?.click()}
-                sx={{ width: 24, height: 24, borderRadius: '50%', border: '1.5px dashed #b9bec7', color: '#6b7280', position: 'relative' }}
+                sx={{ width: 24, height: 24, borderRadius: '50%', border: `1.5px dashed ${ui.gray[400]}`, color: ui.gray[500], position: 'relative' }}
               >
                 <AddRounded sx={{ fontSize: 16 }} />
                 <input
@@ -172,36 +261,31 @@ function PaletteControl({ value, onChange, allowNone, title, label }: PaletteCon
           </Stack>
         </Box>
       </Popover>
-    </>
+    </Group>
   )
 }
 
-/** 불투명도: % 표시 버튼 → 슬라이더 팝오버 */
+/** 불투명도: [◐ 아이콘] + 박스형 % 버튼 → 슬라이더 팝오버 */
 function OpacityControl({ value, onChange }: { value: number; onChange: (v: number) => void }): JSX.Element {
+  const t = useT()
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   return (
-    <>
-      <Tooltip title="불투명도 (흐리게)">
-        <ButtonBase
-          onClick={(e) => setAnchor(e.currentTarget)}
-          sx={{ borderRadius: 2, px: 0.7, py: 0.4, display: 'flex', alignItems: 'center', gap: 0.3, border: '1px solid #d7dae0', '&:hover': { bgcolor: '#f1f2f4' } }}
-        >
-          <OpacityRounded sx={{ fontSize: 16, color: 'text.secondary' }} />
-          <Typography variant="body2" sx={{ minWidth: 34 }}>
-            {Math.round(value * 100)}%
-          </Typography>
-          <ArrowDropDownRounded sx={{ fontSize: 16, ml: -0.4, color: 'text.secondary' }} />
+    <Group icon={<ContrastRounded />} tooltip={t('opacity')}>
+      <Tooltip title={t('opacity')}>
+        <ButtonBase onClick={(e) => setAnchor(e.currentTarget)} sx={{ ...boxBtnSx, px: 1 }}>
+          <Typography sx={{ fontSize: 14.5, minWidth: 38, textAlign: 'left' }}>{Math.round(value * 100)}%</Typography>
+          <ArrowDropDownRounded sx={{ fontSize: 18, color: ui.gray[500] }} />
         </ButtonBase>
       </Tooltip>
       <Popover open={!!anchor} anchorEl={anchor} onClose={() => setAnchor(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}>
-        <Box sx={{ px: 2, py: 1, width: 180, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <Box sx={{ px: 2, py: 1, width: 190, display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Slider size="small" min={10} max={100} value={Math.round(value * 100)} onChange={(_, v) => onChange((v as number) / 100)} />
-          <Typography variant="caption" sx={{ width: 38, textAlign: 'right' }}>
+          <Typography variant="caption" sx={{ width: 40, textAlign: 'right' }}>
             {Math.round(value * 100)}%
           </Typography>
         </Box>
       </Popover>
-    </>
+    </Group>
   )
 }
 
@@ -220,73 +304,95 @@ interface TextControlValues {
 }
 
 const H_ALIGNS = [
-  { v: 'left' as const, icon: FormatAlignLeftRounded, label: '왼쪽 정렬' },
-  { v: 'center' as const, icon: FormatAlignCenterRounded, label: '가운데 정렬' },
-  { v: 'right' as const, icon: FormatAlignRightRounded, label: '오른쪽 정렬' }
+  { v: 'left' as const, icon: FormatAlignLeftRounded, label: 'alignLeft' as I18nKey },
+  { v: 'center' as const, icon: FormatAlignCenterRounded, label: 'alignCenter' as I18nKey },
+  { v: 'right' as const, icon: FormatAlignRightRounded, label: 'alignRight' as I18nKey }
 ]
 const V_ALIGNS = [
-  { v: 'top' as const, icon: VerticalAlignTopRounded, label: '위 정렬' },
-  { v: 'middle' as const, icon: VerticalAlignCenterRounded, label: '세로 가운데 정렬' },
-  { v: 'bottom' as const, icon: VerticalAlignBottomRounded, label: '아래 정렬' }
+  { v: 'top' as const, icon: VerticalAlignTopRounded, label: 'alignTop' as I18nKey },
+  { v: 'middle' as const, icon: VerticalAlignCenterRounded, label: 'alignMiddle' as I18nKey },
+  { v: 'bottom' as const, icon: VerticalAlignBottomRounded, label: 'alignBottom' as I18nKey }
 ]
 
+/** 토글형 아이콘 버튼 (B/I/U, 정렬) — 켜지면 브랜드 틴트 */
+function TIcon({ title, on, onClick, children }: { title: string; on?: boolean; onClick: () => void; children: React.ReactNode }): JSX.Element {
+  return (
+    <Tooltip title={title}>
+      <IconButton
+        size="small"
+        onClick={onClick}
+        sx={{
+          width: 32,
+          height: 32,
+          borderRadius: 1.5,
+          color: on ? 'primary.main' : ui.gray[700],
+          bgcolor: on ? 'primary.light' : 'transparent',
+          '&:hover': { bgcolor: on ? 'primary.light' : ui.gray[100] }
+        }}
+      >
+        {children}
+      </IconButton>
+    </Tooltip>
+  )
+}
+
 function TextControls({ v, patch }: { v: TextControlValues; patch: (p: Partial<TextControlValues>) => void }): JSX.Element {
+  const t = useT()
   return (
     <>
-      <Select
-        size="small"
-        value={v.font}
-        onChange={(e) => patch({ font: e.target.value })}
-        sx={{ minWidth: 140, '& .MuiSelect-select': { fontFamily: FONT_STACKS[v.font] } }}
-        MenuProps={{ PaperProps: { sx: { maxHeight: 360 } } }}
-      >
-        {Object.entries(FONT_STACKS).map(([name, stack]) => (
-          <MenuItem key={name} value={name} sx={{ fontFamily: stack }}>
-            {name}
-          </MenuItem>
+      <Group icon={<TextFieldsRounded />}>
+        <Select
+          size="small"
+          value={v.font}
+          onChange={(e) => patch({ font: e.target.value })}
+          sx={{ ...selectSx, minWidth: 132, '& .MuiSelect-select': { py: 0.5, fontFamily: FONT_STACKS[v.font] } }}
+          MenuProps={{ PaperProps: { sx: { maxHeight: 360 } } }}
+        >
+          {Object.entries(FONT_STACKS).map(([name, stack]) => (
+            <MenuItem key={name} value={name} sx={{ fontFamily: stack }}>
+              {name}
+            </MenuItem>
+          ))}
+        </Select>
+        <Select size="small" value={sizeToPt(v.size)} onChange={(e) => patch({ size: ptToSize(Number(e.target.value)) })} sx={{ ...selectSx, minWidth: 66 }}>
+          {[...new Set([...FONT_SIZES, sizeToPt(v.size)])].sort((a, b) => a - b).map((pt) => (
+            <MenuItem key={pt} value={pt}>
+              {pt}
+            </MenuItem>
+          ))}
+        </Select>
+      </Group>
+      <GDivider />
+      <Group>
+        <TIcon title={t('bold')} on={v.bold} onClick={() => patch({ bold: !v.bold })}>
+          <FormatBoldRounded fontSize="small" />
+        </TIcon>
+        <TIcon title={t('italic')} on={v.italic} onClick={() => patch({ italic: !v.italic })}>
+          <FormatItalicRounded fontSize="small" />
+        </TIcon>
+        <TIcon title={t('underline')} on={v.underline} onClick={() => patch({ underline: !v.underline })}>
+          <FormatUnderlinedRounded fontSize="small" />
+        </TIcon>
+      </Group>
+      <GDivider />
+      <Group>
+        {H_ALIGNS.map(({ v: a, icon: Icon, label }) => (
+          <TIcon key={a} title={t(label)} on={v.align === a} onClick={() => patch({ align: a })}>
+            <Icon fontSize="small" />
+          </TIcon>
         ))}
-      </Select>
-      <Select size="small" value={sizeToPt(v.size)} onChange={(e) => patch({ size: ptToSize(Number(e.target.value)) })}>
-        {[...new Set([...FONT_SIZES, sizeToPt(v.size)])].sort((a, b) => a - b).map((pt) => (
-          <MenuItem key={pt} value={pt}>
-            {pt}
-          </MenuItem>
+      </Group>
+      <GDivider />
+      <Group>
+        {V_ALIGNS.map(({ v: a, icon: Icon, label }) => (
+          <TIcon key={a} title={t(label)} on={v.valign === a} onClick={() => patch({ valign: a })}>
+            <Icon fontSize="small" />
+          </TIcon>
         ))}
-      </Select>
-      <Tooltip title="굵게">
-        <IconButton size="small" color={v.bold ? 'primary' : 'default'} onClick={() => patch({ bold: !v.bold })}>
-          <FormatBoldRounded />
-        </IconButton>
-      </Tooltip>
-      <Tooltip title="기울임">
-        <IconButton size="small" color={v.italic ? 'primary' : 'default'} onClick={() => patch({ italic: !v.italic })}>
-          <FormatItalicRounded />
-        </IconButton>
-      </Tooltip>
-      <Tooltip title="밑줄">
-        <IconButton size="small" color={v.underline ? 'primary' : 'default'} onClick={() => patch({ underline: !v.underline })}>
-          <FormatUnderlinedRounded />
-        </IconButton>
-      </Tooltip>
-      <Divider orientation="vertical" flexItem />
-      {H_ALIGNS.map(({ v: a, icon: Icon, label }) => (
-        <Tooltip key={a} title={label}>
-          <IconButton size="small" color={v.align === a ? 'primary' : 'default'} onClick={() => patch({ align: a })}>
-            <Icon />
-          </IconButton>
-        </Tooltip>
-      ))}
-      <Divider orientation="vertical" flexItem />
-      {V_ALIGNS.map(({ v: a, icon: Icon, label }) => (
-        <Tooltip key={a} title={label}>
-          <IconButton size="small" color={v.valign === a ? 'primary' : 'default'} onClick={() => patch({ valign: a })}>
-            <Icon />
-          </IconButton>
-        </Tooltip>
-      ))}
-      <Divider orientation="vertical" flexItem />
-      <PaletteControl title="글자색" value={v.color} onChange={(c) => patch({ color: c ?? '#111111' })} />
-      <PaletteControl title="글자 배경색" label="배경" value={v.bgColor} onChange={(c) => patch({ bgColor: c })} allowNone />
+      </Group>
+      <GDivider />
+      <PaletteControl icon={<FormatColorTextRounded />} title={t('textColor')} value={v.color} onChange={(c) => patch({ color: c ?? '#111111' })} />
+      <PaletteControl icon={<FormatColorFillRounded />} title={t('bgColor')} value={v.bgColor} onChange={(bgColor) => patch({ bgColor })} allowNone />
       <OpacityControl value={v.opacity} onChange={(opacity) => patch({ opacity })} />
     </>
   )
@@ -295,6 +401,7 @@ function TextControls({ v, patch }: { v: TextControlValues; patch: (p: Partial<T
 const NOTE_COLORS = ['#facc15', '#fb923c', '#ef4444', '#ec4899', '#3b82f6', '#22c55e']
 
 export default function SubToolbar(): JSX.Element | null {
+  const t = useT()
   const tool = useEditor((s) => s.tool)
   const selected = useEditor((s) => s.selected)
   const objectsByPage = useEditor((s) => s.objectsByPage)
@@ -318,12 +425,12 @@ export default function SubToolbar(): JSX.Element | null {
 
   const bar = (children: React.ReactNode): JSX.Element => (
     // height 고정(minHeight 아님): 도구마다 내용 높이가 다르면 페이지가 세로로 튀어 좌표가 어긋난다
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, borderBottom: 1, borderColor: 'divider', bgcolor: '#fff', height: 50, flexShrink: 0, overflowX: 'auto', overflowY: 'hidden' }}>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, px: 1.5, borderBottom: 1, borderColor: 'divider', bgcolor: '#fff', height: 52, flexShrink: 0, overflowX: 'auto', overflowY: 'hidden' }}>
       {children}
       {selObj && selected && (
         <>
           <Box sx={{ flex: 1 }} />
-          <Tooltip title="선택한 객체 삭제 (Delete)">
+          <Tooltip title={t('deleteSelected')}>
             <IconButton size="small" onClick={() => removeObject(selected.pageId, selected.objectId)}>
               <DeleteOutlineRounded />
             </IconButton>
@@ -333,14 +440,20 @@ export default function SubToolbar(): JSX.Element | null {
     </Box>
   )
 
+  const hint = (key: I18nKey): JSX.Element => (
+    <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+      {t(key)}
+    </Typography>
+  )
+
   // ── 선택된 객체 우선: 그 객체 타입의 컨트롤을 보여주고 즉시 반영 ──
   if (selObj && selected) {
     if (selObj.type === 'text') {
-      const t = selObj
+      const obj = selObj
       const patch = (p: Partial<TextControlValues>): void => {
         // 글꼴/크기/굵기/기울임 변경은 상자 폭에 영향 → 실측 폭을 다시 저장 (H=1000 기준 정규화)
         if ('font' in p || 'size' in p || 'bold' in p || 'italic' in p) {
-          const nt = { ...t, ...p } as TextObj
+          const nt = { ...obj, ...p } as TextObj
           const sz = displaySizes[selected.pageId] ?? { w: 595, h: 842 }
           const wPx = measureTextWidthPx(nt.text, nt.size, nt.font, nt.bold, nt.italic, 1000)
           updateObject(selected.pageId, selected.objectId, { ...p, w: Math.min(1, wPx / (1000 * (sz.w / sz.h))) } as Partial<PageObject>)
@@ -348,35 +461,41 @@ export default function SubToolbar(): JSX.Element | null {
         }
         updateObject(selected.pageId, selected.objectId, p as Partial<PageObject>)
       }
-      return bar(<TextControls v={t} patch={patch} />)
+      return bar(<TextControls v={obj} patch={patch} />)
     }
     if (selObj.type === 'editText') {
-      const t = selObj as EditTextObj
+      const et = selObj as EditTextObj
       const patch = (p: Partial<EditTextObj>): void => updateObject(selected.pageId, selected.objectId, p)
       return bar(
         <>
-          <Select size="small" value={t.font} onChange={(e) => patch({ font: e.target.value })} sx={{ minWidth: 140, '& .MuiSelect-select': { fontFamily: FONT_STACKS[t.font] } }}>
-            {Object.entries(FONT_STACKS).map(([name, stack]) => (
-              <MenuItem key={name} value={name} sx={{ fontFamily: stack }}>
-                {name}
-              </MenuItem>
-            ))}
-          </Select>
-          <Select size="small" value={sizeToPt(t.size)} onChange={(e) => patch({ size: ptToSize(Number(e.target.value)) })}>
-            {[...new Set([...FONT_SIZES, sizeToPt(t.size)])].sort((a, b) => a - b).map((pt) => (
-              <MenuItem key={pt} value={pt}>
-                {pt}
-              </MenuItem>
-            ))}
-          </Select>
-          <IconButton size="small" color={t.bold ? 'primary' : 'default'} onClick={() => patch({ bold: !t.bold })}>
-            <FormatBoldRounded />
-          </IconButton>
-          <IconButton size="small" color={t.italic ? 'primary' : 'default'} onClick={() => patch({ italic: !t.italic })}>
-            <FormatItalicRounded />
-          </IconButton>
-          <PaletteControl title="글자색" value={t.color} onChange={(c) => patch({ color: c ?? '#111111' })} />
-          <OpacityControl value={t.opacity} onChange={(opacity) => patch({ opacity })} />
+          <Group icon={<TextFieldsRounded />}>
+            <Select size="small" value={et.font} onChange={(e) => patch({ font: e.target.value })} sx={{ ...selectSx, minWidth: 132, '& .MuiSelect-select': { py: 0.5, fontFamily: FONT_STACKS[et.font] } }}>
+              {Object.entries(FONT_STACKS).map(([name, stack]) => (
+                <MenuItem key={name} value={name} sx={{ fontFamily: stack }}>
+                  {name}
+                </MenuItem>
+              ))}
+            </Select>
+            <Select size="small" value={sizeToPt(et.size)} onChange={(e) => patch({ size: ptToSize(Number(e.target.value)) })} sx={{ ...selectSx, minWidth: 66 }}>
+              {[...new Set([...FONT_SIZES, sizeToPt(et.size)])].sort((a, b) => a - b).map((pt) => (
+                <MenuItem key={pt} value={pt}>
+                  {pt}
+                </MenuItem>
+              ))}
+            </Select>
+          </Group>
+          <GDivider />
+          <Group>
+            <TIcon title={t('bold')} on={et.bold} onClick={() => patch({ bold: !et.bold })}>
+              <FormatBoldRounded fontSize="small" />
+            </TIcon>
+            <TIcon title={t('italic')} on={et.italic} onClick={() => patch({ italic: !et.italic })}>
+              <FormatItalicRounded fontSize="small" />
+            </TIcon>
+          </Group>
+          <GDivider />
+          <PaletteControl icon={<FormatColorTextRounded />} title={t('textColor')} value={et.color} onChange={(c) => patch({ color: c ?? '#111111' })} />
+          <OpacityControl value={et.opacity} onChange={(opacity) => patch({ opacity })} />
         </>
       )
     }
@@ -385,19 +504,16 @@ export default function SubToolbar(): JSX.Element | null {
       const patch = (p: Partial<ShapeObj>): void => updateObject(selected.pageId, selected.objectId, p)
       return bar(
         <>
-          <PaletteControl title="선 색" value={sh.stroke} onChange={(c) => patch({ stroke: c ?? '#2563eb' })} />
-          <Select size="small" value={widthToPt(sh.strokeWidth)} onChange={(e) => patch({ strokeWidth: ptToWidth(Number(e.target.value)) })}>
-            {PEN_WIDTHS.map((pt) => (
-              <MenuItem key={pt} value={pt}>
-                {pt} pt
-              </MenuItem>
-            ))}
-          </Select>
-          <DashSelect value={sh.dash ?? 'solid'} onChange={(dash) => patch({ dash })} />
+          <PaletteControl icon={<BorderColorRounded />} title={t('strokeColor')} value={sh.stroke} onChange={(c) => patch({ stroke: c ?? '#2563eb' })} />
           {(sh.kind === 'rect' || sh.kind === 'ellipse') && (
-            <PaletteControl title="채우기 색" label="채우기" value={sh.fill} onChange={(fill) => patch({ fill })} allowNone />
+            <PaletteControl icon={<FormatColorFillRounded />} title={t('fillColor')} value={sh.fill} onChange={(fill) => patch({ fill })} allowNone />
           )}
+          <GDivider />
           <OpacityControl value={sh.opacity} onChange={(opacity) => patch({ opacity })} />
+          <GDivider />
+          <WidthSelect value={sh.strokeWidth} onChange={(strokeWidth) => patch({ strokeWidth })} />
+          <GDivider />
+          <DashSelect value={sh.dash ?? 'solid'} onChange={(dash) => patch({ dash })} />
         </>
       )
     }
@@ -406,15 +522,31 @@ export default function SubToolbar(): JSX.Element | null {
       return bar(
         <>
           <Typography variant="caption" color="text.secondary">
-            노트 색
+            {t('noteColor')}
           </Typography>
           {NOTE_COLORS.map((c) => (
-            <Box key={c} onClick={() => updateObject(selected.pageId, selected.objectId, { color: c })} sx={{ width: 22, height: 22, borderRadius: '50%', bgcolor: c, cursor: 'pointer', border: n.color === c ? '2px solid #1f2430' : '2px solid transparent' }} />
+            <Box key={c} onClick={() => updateObject(selected.pageId, selected.objectId, { color: c })} sx={{ width: 22, height: 22, borderRadius: '50%', bgcolor: c, cursor: 'pointer', border: n.color === c ? `2px solid ${ui.gray[800]}` : '2px solid transparent' }} />
           ))}
         </>
       )
     }
-    if (selObj.type === 'image' || selObj.type === 'stroke' || selObj.type === 'link') {
+    if (selObj.type === 'stroke') {
+      const st = selObj as StrokeObj
+      const patch = (p: Partial<StrokeObj>): void => updateObject(selected.pageId, selected.objectId, p)
+      return bar(
+        <>
+          <PaletteControl icon={<BorderColorRounded />} title={t('color')} value={st.color} onChange={(c) => patch({ color: c ?? '#facc15' })} />
+          <PaletteControl icon={<FormatColorFillRounded />} title={t('fillColor')} value={st.fill ?? null} onChange={(fill) => patch({ fill })} allowNone />
+          <GDivider />
+          <OpacityControl value={st.opacity} onChange={(opacity) => patch({ opacity })} />
+          <GDivider />
+          <WidthSelect value={st.width} onChange={(width) => patch({ width })} list={[1, 2, 3, 5, 8, 12, 18, 30, 45]} />
+          <GDivider />
+          <BlendSelect value={st.blend ?? (st.kind === 'highlight' ? 'multiply' : 'normal')} onChange={(blend) => patch({ blend })} />
+        </>
+      )
+    }
+    if (selObj.type === 'image' || selObj.type === 'link') {
       const patch = (p: Partial<PageObject>): void => updateObject(selected.pageId, selected.objectId, p)
       return bar(<OpacityControl value={selObj.opacity} onChange={(opacity) => patch({ opacity })} />)
     }
@@ -424,113 +556,69 @@ export default function SubToolbar(): JSX.Element | null {
   switch (tool) {
     case 'addText':
     case 'editText':
-      return bar(
-        <>
-          <TextControls v={textStyle} patch={(p) => setTextStyle(p as Partial<TextStyle>)} />
-          <Typography variant="caption" color="text.secondary" sx={{ ml: 1, whiteSpace: 'nowrap' }}>
-            {tool === 'addText' ? '페이지를 클릭해 텍스트를 입력하세요' : '페이지의 텍스트를 클릭하면 수정할 수 있습니다'}
-          </Typography>
-        </>
-      )
+      return bar(<TextControls v={textStyle} patch={(p) => setTextStyle(p as Partial<TextStyle>)} />)
     case 'pencil':
       return bar(
         <>
-          <PaletteControl title="색상" value={penStyle.color} onChange={(c) => setPenStyle({ color: c ?? '#2563eb' })} />
-          <Select size="small" value={widthToPt(penStyle.width)} onChange={(e) => setPenStyle({ width: ptToWidth(Number(e.target.value)) })}>
-            {PEN_WIDTHS.map((pt) => (
-              <MenuItem key={pt} value={pt}>
-                {pt} pt
-              </MenuItem>
-            ))}
-          </Select>
+          <PaletteControl icon={<BorderColorRounded />} title={t('color')} value={penStyle.color} onChange={(c) => setPenStyle({ color: c ?? '#2563eb' })} />
+          <GDivider />
           <OpacityControl value={penStyle.opacity} onChange={(opacity) => setPenStyle({ opacity })} />
+          <GDivider />
+          <WidthSelect value={penStyle.width} onChange={(width) => setPenStyle({ width })} />
         </>
       )
     case 'highlight':
       return bar(
         <>
-          <PaletteControl title="색상" value={highlightStyle.color} onChange={(c) => setHighlightStyle({ color: c ?? '#facc15' })} />
-          <Select size="small" value={widthToPt(highlightStyle.width)} onChange={(e) => setHighlightStyle({ width: ptToWidth(Number(e.target.value)) })}>
-            {[8, 12, 18, 30, 45].map((pt) => (
-              <MenuItem key={pt} value={pt}>
-                {pt} pt
-              </MenuItem>
-            ))}
-          </Select>
+          <PaletteControl icon={<BorderColorRounded />} title={t('color')} value={highlightStyle.color} onChange={(c) => setHighlightStyle({ color: c ?? '#facc15' })} />
+          <PaletteControl icon={<FormatColorFillRounded />} title={t('fillColor')} value={highlightStyle.fill} onChange={(fill) => setHighlightStyle({ fill })} allowNone />
+          <GDivider />
           <OpacityControl value={highlightStyle.opacity} onChange={(opacity) => setHighlightStyle({ opacity })} />
+          <GDivider />
+          <WidthSelect value={highlightStyle.width} onChange={(width) => setHighlightStyle({ width })} list={[8, 12, 18, 30, 45]} />
+          <GDivider />
+          <BlendSelect value={highlightStyle.blend} onChange={(blend) => setHighlightStyle({ blend })} />
         </>
       )
     case 'whiteout':
       // 지우개 = 도형으로 덮기 (Guru Eraser). 도형 선택은 메인 툴바의 도형 버튼(연동)에서
       return bar(
         <>
-          <PaletteControl title="테두리 색" value={eraserStyle.stroke} onChange={(c) => setEraserStyle({ stroke: c ?? '#ffffff' })} />
-          <Select size="small" value={widthToPt(eraserStyle.strokeWidth)} onChange={(e) => setEraserStyle({ strokeWidth: ptToWidth(Number(e.target.value)) })}>
-            {PEN_WIDTHS.map((pt) => (
-              <MenuItem key={pt} value={pt}>
-                {pt} pt
-              </MenuItem>
-            ))}
-          </Select>
-          <DashSelect value={eraserStyle.dash} onChange={(dash) => setEraserStyle({ dash })} />
-          <PaletteControl title="채우기 색" label="채우기" value={eraserStyle.fill} onChange={(c) => setEraserStyle({ fill: c ?? '#ffffff' })} />
+          <PaletteControl icon={<BorderColorRounded />} title={t('borderColor')} value={eraserStyle.stroke} onChange={(c) => setEraserStyle({ stroke: c ?? '#ffffff' })} />
+          <PaletteControl icon={<FormatColorFillRounded />} title={t('fillColor')} value={eraserStyle.fill} onChange={(c) => setEraserStyle({ fill: c ?? '#ffffff' })} />
+          <GDivider />
           <OpacityControl value={eraserStyle.opacity} onChange={(opacity) => setEraserStyle({ opacity })} />
-          <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
-            드래그한 영역을 덮어서 지웁니다
-          </Typography>
+          <GDivider />
+          <WidthSelect value={eraserStyle.strokeWidth} onChange={(strokeWidth) => setEraserStyle({ strokeWidth })} />
+          <GDivider />
+          <DashSelect value={eraserStyle.dash} onChange={(dash) => setEraserStyle({ dash })} />
         </>
       )
     case 'eraseDrawing':
-      return bar(
-        <Typography variant="caption" color="text.secondary">
-          연필·형광펜 선을 클릭하거나 문질러 지웁니다
-        </Typography>
-      )
+      return bar(hint('hintEraseDrawing'))
     case 'rect':
     case 'ellipse':
     case 'cross':
     case 'check':
       return bar(
         <>
-          <PaletteControl title="선 색" value={shapeStyle.stroke} onChange={(c) => setShapeStyle({ stroke: c ?? '#2563eb' })} />
-          <Select size="small" value={widthToPt(shapeStyle.strokeWidth)} onChange={(e) => setShapeStyle({ strokeWidth: ptToWidth(Number(e.target.value)) })}>
-            {PEN_WIDTHS.map((pt) => (
-              <MenuItem key={pt} value={pt}>
-                {pt} pt
-              </MenuItem>
-            ))}
-          </Select>
+          <PaletteControl icon={<BorderColorRounded />} title={t('strokeColor')} value={shapeStyle.stroke} onChange={(c) => setShapeStyle({ stroke: c ?? '#2563eb' })} />
+          {(tool === 'rect' || tool === 'ellipse') && (
+            <PaletteControl icon={<FormatColorFillRounded />} title={t('fillColor')} value={shapeStyle.fill} onChange={(fill) => setShapeStyle({ fill })} allowNone />
+          )}
+          <GDivider />
+          <WidthSelect value={shapeStyle.strokeWidth} onChange={(strokeWidth) => setShapeStyle({ strokeWidth })} />
+          <GDivider />
           <DashSelect value={shapeStyle.dash} onChange={(dash) => setShapeStyle({ dash })} />
-          {(tool === 'rect' || tool === 'ellipse') && (
-            <PaletteControl title="채우기 색" label="채우기" value={shapeStyle.fill} onChange={(fill) => setShapeStyle({ fill })} allowNone />
-          )}
-          {(tool === 'rect' || tool === 'ellipse') && (
-            <Typography variant="caption" color="text.secondary">
-              드래그해서 그리기
-            </Typography>
-          )}
-          {(tool === 'cross' || tool === 'check') && (
-            <Typography variant="caption" color="text.secondary">
-              클릭한 위치에 표시
-            </Typography>
-          )}
         </>
       )
     case 'note':
-      return bar(
-        <Typography variant="caption" color="text.secondary">
-          페이지를 클릭하면 노트가 붙습니다
-        </Typography>
-      )
+      return bar(hint('hintNote'))
     case 'link':
-      return bar(
-        <Typography variant="caption" color="text.secondary">
-          링크를 걸 영역을 드래그하세요
-        </Typography>
-      )
+      return bar(hint('hintLink'))
     default:
       // 항상 바를 렌더한다 (pdfguru처럼 서식 줄 상시 표시).
-      // 사라지면 문서 전체가 세로로 튀어(레이아웃 점프) 클릭 위치가 어긋난다.
+      // 사라지면 문서 전체가 세로로 튀어(레이아웃 점프) 클릭 위치가 어긋난다
       return bar(<TextControls v={textStyle} patch={(p) => setTextStyle(p as Partial<TextStyle>)} />)
   }
 }

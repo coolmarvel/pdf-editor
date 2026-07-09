@@ -9,6 +9,131 @@ domain: development
 
 git 저장소가 아니므로 이 파일이 **"언제 무슨 일이 있었나"의 SSOT**다. 세션마다 최상단에 블록 추가.
 
+## 2026-07-09 — v1.4.0: 1.3.x 배치 확정 (사용자 선언)
+
+사용자가 1.3.x(i18n·페이지 기능·형광펜·UI 스킨·규격 통일) OK → **1.4.0 승격** (내용 = 1.3.6 동일).
+다음 작업부터 1.4.x. git 커밋은 사용자가 직접 (메시지 전달함).
+
+## 2026-07-09 — v1.3.6: 툴바 버튼 규격 통일 (76×48 고정)
+
+**피드백** (스크린샷 2장 → `docs/feedback-archive/2026-07-09-v1.3.5-toolbar-uniform/`): 툴 버튼 활성 박스가
+라벨 길이 따라 제각각("텍스트 수정" 넓고 "형광펜" 좁음), ⌄ 유무로도 리듬 다름 — 전부 동일 크기로.
+
+**수정** (Toolbar ToolBtn): 본체 **76×48px 고정**(TOOLBTN_W/H 상수), p:0 + 내부 중앙 정렬,
+라벨 11.5px + ellipsis(초과 방지), ⌄ 화살표 16×48 고정 부가물. "페이지 레이아웃" 라벨은 규격 초과라
+i18n 값 자체를 "레이아웃"/"Layout" 으로 축약. E2E로 8개 버튼 실측 → 전부 76×48 ✅.
+
+## 2026-07-09 — v1.3.5: 컨텍스트 바 Guru 문법으로 전면 재구성
+
+**피드백** (스크린샷 2장 → `docs/feedback-archive/2026-07-09-v1.3.4-ctxbar/`): 우리 컨텍스트 바는 뭐가 뭔지
+알 수 없음, 컨트롤 크기 제각각 — Guru 처럼 전 도구(텍스트 추가~링크) 통일.
+
+**구현** (SubToolbar 전면 재작성 — 공용 빌딩블록):
+- **Guru 문법**: 컨트롤마다 `[의미 아이콘(회색20px, 툴팁)] + [36px 통일 높이 박스형 컨트롤]` = `Group`,
+  그룹 사이 `GDivider`(세로선). 아이콘: 색=펜, 채우기=페인트통, 불투명도=◐(Contrast), 굵기=≡(LineWeight),
+  선 스타일=LineStyle, 혼합=Layers, 폰트=Tт, 글자색=A.
+- 공용 컴포넌트: `PaletteControl`(박스형 스와치+⌄ 트리거), `OpacityControl`(박스형 %+슬라이더),
+  `WidthSelect`(pt, 현재값 포함 보장), `DashSelect`, `BlendSelect`, `TIcon`(B/I/U·정렬 토글 32px).
+- 적용: 텍스트(도구/선택)/editText/도형(도구/선택)/연필/형광펜/지우개/스트로크 선택 전부.
+  컨트롤 순서도 Guru 와 맞춤: 색 → 채우기 → 불투명도 → 굵기 → 스타일/혼합.
+- 지우개 기본 테두리 5pt(Guru 기본), 불필요한 힌트 텍스트 제거(아이콘이 설명), 바 높이 52px 고정 유지.
+
+**검증**: 도구별 바 스크린샷 5종 검수(Guru 와 구조 일치) ✅ 회귀 E2E ✅ test 21/21 ✅
+→ `PDF편집기-Setup-1.3.5.exe` 바탕화면 ✅.
+
+## 2026-07-09 — v1.3.4: TailAdmin 디자인 스킨 이식
+
+**피드백** (구두): UI 스타일이 구림 — `tailadmin-nextjs-pro-225/`(루트, **gitignore 처리**)의 UI/UX 를 학습해
+껍데기만 이식. 색상은 기존 레드 유지, 기능 무변경. 마음에 안 들면 롤백 예정.
+
+**방식**: TailAdmin 토큰을 **theme.ts 한 곳에 집약**(MUI styleOverrides = 재사용 스킨) + 하드코딩 색 정리.
+- 토큰(`export const ui`): Untitled UI 그레이 스케일(50 #f9fafb/200 #e4e7ec 보더/300 #d0d5dd 인풋보더/
+  500 #667085 보조텍스트/800 #1d2939/900 #101828), 브랜드 레드 스케일(50 #fdeeee ~ 700),
+  섀도 xs/sm/md/lg(이중 레이어) + focus-ring(브랜드 12% 4px)
+- 컴포넌트: Button(rounded-lg·shadow-xs·outline=흰배경+회색링), OutlinedInput/Select(포커스 브랜드 링),
+  Menu/Popover(rounded-xl·보더·shadow-lg·아이템 라운드/브랜드 selected), Dialog(rounded-2xl),
+  Tooltip(gray-800), ToggleButtonGroup(회색 트랙+흰 선택 세그먼트)
+- 컴포넌트 정리: 사이드바 gray-25 배경·페이지 관리 버튼을 표준 outline 으로, 랜딩 드롭존 카드화(흰 배경+섀도),
+  플로팅 페이저 gray-800, hover 색 #f2f4f7(gray-100) 통일
+- 참조 소스: globals.css(토큰)/ui/button/dropdown/form/input — 코드 복사 없음, 디자인 값만 이식
+
+**검증**: 랜딩/에디터/메뉴/다이얼로그 스크린샷 검수 ✅ 회귀 E2E(visual+pages) ✅ test 21/21 ✅
+→ `PDF편집기-Setup-1.3.4.exe` 바탕화면 ✅. 롤백 시: 이 커밋 전 상태로 (테마+상기 컴포넌트 색만 되돌리면 됨).
+
+## 2026-07-09 — v1.3.3: 혼합 모드가 실제로 섞이게 (백드롭 합성)
+
+**피드백** (구두): 혼합 모드를 바꿔도 전부 똑같아 보임.
+**원인**: 오버레이가 **투명한 별도 캔버스**라 블렌드가 "투명 배경"과 섞인 뒤 PDF 위에 source-over 로 얹힘
+→ 모드 불문 알파만 보임. 블렌드는 페이지 픽셀을 백드롭으로 깔아야 의미가 있다.
+
+**수정**:
+- **에디터**(`PageCanvas.redrawOverlay`): 그릴 객체(+드래그 미리보기) 중 실효 블렌드≠normal 이 있으면
+  흰 배경 + base 캔버스(PDF 렌더)를 오버레이에 먼저 복사한 뒤 객체를 블렌드로 그림.
+  base 렌더 완료 시 bump() 로 오버레이 재그리기 (빈 백드롭으로 굳는 타이밍 버그 예방).
+- **저장**(`save.ts burnOverlayPng`): 블렌드 객체가 있으면 페이지를 pdf.js 로 래스터(scale 동일) → 백드롭 위에
+  블렌드로 그림 → **객체 커버리지 마스크로 destination-in** — 화면과 같은 혼합 결과 조각만 원본 벡터 위에 얹음.
+  (커버 영역만 래스터화, 나머지는 벡터 유지. 반투명 객체는 마스크 알파 3배 증폭 — 굽힌 픽셀에 이미 혼합 포함)
+- `effectiveBlend()` 헬퍼 (draw.ts): stroke 는 blend ?? (highlight→multiply), 그 외 normal.
+
+**검증**: 5개 모드 시각 비교 — Normal(띠+물듦)/Multiply(글자 또렷)/Screen(글자만 밝아짐)/
+Difference(보색 파란 띠) 전부 상이 ✅. 회귀 E2E ✅ test 21/21 ✅ → `PDF편집기-Setup-1.3.3.exe` 바탕화면 ✅.
+
+## 2026-07-09 — v1.3.2: 형광펜 Guru 파리티 + 기본 배율 폭 맞춤
+
+**피드백** (스크린샷 3장 → `docs/feedback-archive/2026-07-09-v1.3.1-highlight-zoom/`):
+① 기본 로드 배율이 너무 작음(45%) — Guru 처럼 메인에 꽉 차게 ② 형광펜에 혼합 모드(Normal~Exclusion)·
+채우기 색 없음 ③ 형광펜 커서를 지우개처럼 빈 원으로.
+
+**구현**:
+
+1. **기본 배율 = 폭 맞춤**: store `fitMode: 'width'|'page'` — zoom=0 재-fit 시 기본 width(두 쪽 모드는
+   2페이지 폭 계산), 레이아웃 패널 "화면에 맞춤" 버튼만 page(전체 보임). setPageMode 도 width 재-fit.
+2. **형광펜**: `StrokeObj`에 `fill?`(경로 내부 채움)·`blend?`(BlendMode 12종 — 캔버스 gCO 와 1:1) 추가.
+   drawStroke 가 blend 적용(기본: highlight=multiply) + fill 먼저 칠하고 stroke.
+   `HighlightStyle`(fill/blend 포함) 신설. 컨텍스트 바: 색/채우기(없음 기본)/불투명도/굵기/**혼합 모드 Select**.
+   선택된 스트로크(연필 포함)도 동일 풀 컨트롤로 확장. 굵기 15pt(기본값)가 옵션에 없어 빈 칸으로 보이던 버그 수정.
+3. **형광펜 커서 = 빈 원**(ERASE_CURSOR 재사용).
+
+**주의**: 기본 배율 변경으로 visual-check 의 절대 좌표(0.55h 클릭·클립)가 뷰포트 밖으로 나가 실패 —
+0.3h 로 조정. **배율/레이아웃을 바꾸면 E2E 좌표 가정도 같이 점검할 것.**
+검증: typecheck ✅ test 21/21 ✅ visual-check·pages-check ✅ → `PDF편집기-Setup-1.3.2.exe` 바탕화면 ✅.
+
+## 2026-07-09 — v1.3.1: 전역 폰트 확대
+
+**피드백** (구두): 전체적으로 글씨가 작아 깨져 보임 → 키워달라.
+**수정**: theme.typography `fontSize 14→15`, `caption 12→13`(컨텍스트 바 힌트류), 툴바 라벨 `11→12px`.
+E2E 스크린샷으로 툴바/컨텍스트 바 확대·한 줄 유지 확인 ✅ → `PDF편집기-Setup-1.3.1.exe` 바탕화면 ✅.
+
+## 2026-07-09 — v1.3.0: i18n(한/영) + 페이지 기능 대개편 (사이드바·페이지 관리·레이아웃)
+
+**피드백** (Guru 스크린샷 9장 + 우리 랜딩 1장 → `docs/feedback-archive/2026-07-09-v1.2.6-pages-i18n/`).
+**버전 규칙**: 이 기능군은 사용자 OK 전까지 1.3.x 로 계속 올림.
+
+**1) i18n** (`src/renderer/src/i18n.ts` — 라이브러리 없이 사전+zustand):
+- `lang: 'ko'|'en'` store 상태, localStorage('lang') 유지. `useT()` 훅으로 전 컴포넌트 문자열 교체
+  (Landing/TopBar/Toolbar/SubToolbar/FloatingPager/Editor 다이얼로그/ManagePages/Stamp/Sign/PageCanvas 팝업).
+- 랜딩 우측 상단 언어 토글(한국어/English). 주의: SubToolbar 의 `const t = selObj` 가 i18n `t` 를 가리는
+  섀도잉이 있었음 — obj/et 로 개명.
+
+**2) 사이드바** (`ThumbnailSidebar` 전면 재작성):
+- **폭 조절 핸들**(우측 가장자리 드래그, 150~420px, localStorage 유지)
+- 썸네일 호버 → **⋮ 메뉴**: 위/아래 이동·좌/우 회전·복제·**페이지 추출**(단일 페이지를 새 PDF 로 저장, buildPdf 재사용)·삭제
+- **드래그 순서 변경**: 포인터 기반(6px 임계) + 보라 삽입선. ⚠ HTML5 dnd 는 Electron/Playwright 에서 불안정해
+  포인터 방식으로 구현 (pointerdown preventDefault 로 텍스트 선택·자동 스크롤 차단 필수)
+- 페이지 사이 **실선+⊕**(호버 시 표시) → 페이지 추가 / PDF 업로드(그 위치에 삽입 — `insertDocument(index)` 신설)
+
+**3) 페이지 관리 다이얼로그**: 같은 포인터 드래그로 순서 변경(세로 보라선, 그리드 좌/우 절반 판정),
+선택 묶음째 이동 지원. `movePagesToIndex()` 신설(+테스트 2개).
+
+**4) 페이지 레이아웃 패널** (Guru 구조): Page Mode(한 쪽/두 쪽/화면 맞춤) · Page Transition(이어서/한 장씩) ·
+Page Rotation(현재 페이지 좌/우). store `pageMode`/`pageTransition`/`requestFit`(zoom=0 → PagesView 재-fit).
+PagesView 재작성: double = 2쪽 나란히(행 단위), paged = 현재 장(쌍)만 렌더, 페이저가 두쪽+한장씩일 땐 2씩 이동.
+
+**E2E** (`e2e/pages-check.cjs` 신규): 영어 랜딩 ✓ / ⋮ 메뉴 ✓ / ⊕ 메뉴 ✓ / 드래그 재정렬(전후 순서 비교) ✓ /
+레이아웃 패널·두 쪽·한 장씩 ✓. 함정: 드래그 목표 좌표가 뷰포트 밖이면 이벤트 미전달(테스트 실패 원인이었음).
+visual-check 는 스플릿 버튼 대응(지우개 메뉴는 ⌄로 열기). typecheck ✅ test 21/21 ✅ 회귀 E2E ✅
+→ `PDF편집기-Setup-1.3.0.exe` 바탕화면 ✅.
+
 ## 2026-07-09 — v1.2.6: 드롭다운 도구 스플릿 버튼화 (Guru)
 
 **피드백** (Guru 스크린샷 1장 + 잔여 3장 → `docs/feedback-archive/2026-07-09-v1.2.5-split-buttons/`):

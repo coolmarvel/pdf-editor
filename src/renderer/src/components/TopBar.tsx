@@ -13,6 +13,7 @@ import PrintOutlined from '@mui/icons-material/PrintOutlined'
 import DownloadRounded from '@mui/icons-material/DownloadRounded'
 import CheckRounded from '@mui/icons-material/CheckRounded'
 import { useEditor } from '@renderer/store/editor'
+import { useT } from '@renderer/i18n'
 
 export interface TopBarProps {
   busy: boolean
@@ -22,6 +23,7 @@ export interface TopBarProps {
 }
 
 export default function TopBar({ busy, onPrint, onDownload, onDone }: TopBarProps): JSX.Element {
+  const t = useT()
   const fileName = useEditor((s) => s.fileName)
   const setFileName = useEditor((s) => s.setFileName)
   const [renaming, setRenaming] = useState(false)
@@ -31,7 +33,7 @@ export default function TopBar({ busy, onPrint, onDownload, onDone }: TopBarProp
       <Stack direction="row" spacing={0.8} alignItems="center">
         <PictureAsPdfRounded color="primary" sx={{ fontSize: 26 }} />
         <Typography fontWeight={800} sx={{ whiteSpace: 'nowrap' }}>
-          PDF 편집기
+          {t('appName')}
         </Typography>
       </Stack>
 
@@ -49,9 +51,9 @@ export default function TopBar({ busy, onPrint, onDownload, onDone }: TopBarProp
         ) : (
           <>
             <Typography color="text.secondary" noWrap sx={{ maxWidth: 300 }}>
-              {fileName || '제목 없음'}
+              {fileName || t('untitled')}
             </Typography>
-            <Tooltip title="파일명 변경">
+            <Tooltip title={t('rename')}>
               <IconButton size="small" onClick={() => setRenaming(true)}>
                 <EditOutlined fontSize="small" />
               </IconButton>
@@ -63,14 +65,14 @@ export default function TopBar({ busy, onPrint, onDownload, onDone }: TopBarProp
       <Box sx={{ flex: 1 }} />
 
       {busy && <CircularProgress size={20} />}
-      <Tooltip title="인쇄">
+      <Tooltip title={t('print')}>
         <span>
           <IconButton disabled={busy} onClick={onPrint}>
             <PrintOutlined />
           </IconButton>
         </span>
       </Tooltip>
-      <Tooltip title="PDF로 저장">
+      <Tooltip title={t('saveAsPdf')}>
         <span>
           <IconButton disabled={busy} onClick={onDownload}>
             <DownloadRounded />
@@ -78,7 +80,7 @@ export default function TopBar({ busy, onPrint, onDownload, onDone }: TopBarProp
         </span>
       </Tooltip>
       <Button variant="contained" startIcon={<CheckRounded />} disabled={busy} onClick={onDone} sx={{ borderRadius: 99, px: 3 }}>
-        완료
+        {t('done')}
       </Button>
     </Box>
   )

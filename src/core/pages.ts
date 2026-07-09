@@ -92,11 +92,27 @@ export function nudgePages(pages: PageRef[], ids: Set<string>, dir: -1 | 1): Pag
 
 /** 다른 문서의 페이지들을 끝에 추가 (Import Document) */
 export function appendDocument(pages: PageRef[], docId: string, pageCount: number): PageRef[] {
+  return insertDocument(pages, docId, pageCount, pages.length)
+}
+
+/** 다른 문서의 페이지들을 index 위치 앞에 삽입 (사이드바 + 버튼의 "PDF 업로드") */
+export function insertDocument(pages: PageRef[], docId: string, pageCount: number, index: number): PageRef[] {
   const added: PageRef[] = Array.from({ length: pageCount }, (_, i) => ({
     id: newPageId(),
     docId,
     pageIndex: i,
     extraRotation: 0 as Rotation
   }))
-  return [...pages, ...added]
+  const at = Math.max(0, Math.min(index, pages.length))
+  return [...pages.slice(0, at), ...added, ...pages.slice(at)]
+}
+
+/** 페이지 묶음을 목록의 index 위치로 이동 (드래그 앤 드롭). index = 이동 전 배열 기준 삽입점 */
+export function movePagesToIndex(pages: PageRef[], ids: Set<string>, index: number): PageRef[] {
+  const moving = pages.filter((p) => ids.has(p.id))
+  if (moving.length === 0) return pages
+  // 삽입점 앞에 있던 "이동 대상이 아닌" 페이지 수 = 남은 배열에서의 삽입 위치
+  const before = pages.slice(0, Math.max(0, Math.min(index, pages.length))).filter((p) => !ids.has(p.id)).length
+  const rest = pages.filter((p) => !ids.has(p.id))
+  return [...rest.slice(0, before), ...moving, ...rest.slice(before)]
 }

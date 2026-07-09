@@ -71,6 +71,21 @@ export interface EditTextObj extends BaseObj {
 
 export type StrokeKind = 'pencil' | 'highlight' | 'whiteout'
 
+/** 캔버스 globalCompositeOperation 과 1:1 (normal = source-over) */
+export type BlendMode =
+  | 'normal'
+  | 'multiply'
+  | 'screen'
+  | 'overlay'
+  | 'darken'
+  | 'lighten'
+  | 'color-dodge'
+  | 'color-burn'
+  | 'hard-light'
+  | 'soft-light'
+  | 'difference'
+  | 'exclusion'
+
 /** 자유 곡선: 연필/형광펜/지우개(흰칠) */
 export interface StrokeObj extends BaseObj {
   type: 'stroke'
@@ -79,6 +94,10 @@ export interface StrokeObj extends BaseObj {
   /** 선 굵기 = 페이지 폭 대비 비율 */
   width: number
   points: [number, number][]
+  /** 경로 내부 채움 색 (없으면 선만) */
+  fill?: string | null
+  /** 혼합 모드. 없으면 highlight=multiply, 그 외 normal */
+  blend?: BlendMode
 }
 
 export type ShapeKind = 'rect' | 'ellipse' | 'cross' | 'check'

@@ -1,25 +1,186 @@
 import { createTheme } from '@mui/material/styles'
 
 /**
- * pdfguru 느낌의 라이트 테마: 흰 바탕 + 레드 포인트 + 둥근 모서리.
- * 데스크톱 앱이라 밀도를 살짝 높인다(컴팩트).
+ * TailAdmin 디자인 언어를 MUI 테마로 이식한 스킨 (브랜드 색만 pdfguru 레드 유지).
+ * 모든 컴포넌트가 이 테마를 공유하므로 여기 한 곳이 "재사용 컴포넌트" 역할을 한다.
+ *
+ * 토큰 출처: tailadmin-nextjs-pro (globals.css / Button / Dropdown / InputField)
+ * - 그레이: Untitled UI 스케일 (50 #f9fafb · 100 #f2f4f7 · 200 #e4e7ec · 300 #d0d5dd · 500 #667085 · 800 #1d2939 · 900 #101828)
+ * - 섀도: shadow-theme-xs/sm/md/lg (부드러운 이중 레이어) + focus-ring(브랜드 12% 4px)
+ * - 라운드: 버튼/인풋 8px(rounded-lg) · 드롭다운 12px(rounded-xl) · 모달 16px(rounded-2xl)
  */
+
+// ── TailAdmin 토큰 ──
+export const ui = {
+  gray: {
+    25: '#fcfcfd',
+    50: '#f9fafb',
+    100: '#f2f4f7',
+    200: '#e4e7ec',
+    300: '#d0d5dd',
+    400: '#98a2b3',
+    500: '#667085',
+    600: '#475467',
+    700: '#344054',
+    800: '#1d2939',
+    900: '#101828'
+  },
+  // 브랜드(레드) 스케일 — TailAdmin brand-* 구조를 우리 색으로
+  brand: {
+    50: '#fdeeee',
+    100: '#fadbdc',
+    500: '#e0343f',
+    600: '#c22832',
+    700: '#a82028'
+  },
+  shadow: {
+    xs: '0px 1px 2px 0px rgba(16, 24, 40, 0.05)',
+    sm: '0px 1px 3px 0px rgba(16, 24, 40, 0.1), 0px 1px 2px 0px rgba(16, 24, 40, 0.06)',
+    md: '0px 4px 8px -2px rgba(16, 24, 40, 0.1), 0px 2px 4px -2px rgba(16, 24, 40, 0.06)',
+    lg: '0px 12px 16px -4px rgba(16, 24, 40, 0.08), 0px 4px 6px -2px rgba(16, 24, 40, 0.03)',
+    focusRing: '0px 0px 0px 4px rgba(224, 52, 63, 0.12)'
+  }
+} as const
+
 export const theme = createTheme({
   palette: {
     mode: 'light',
-    primary: { main: '#e0343f', dark: '#c22832', light: '#f8d7d9' },
+    primary: { main: ui.brand[500], dark: ui.brand[600], light: ui.brand[50] },
     secondary: { main: '#5b5bd6' },
-    background: { default: '#f6f7f9', paper: '#ffffff' },
-    text: { primary: '#1f2430', secondary: '#6b7280' }
+    background: { default: ui.gray[50], paper: '#ffffff' },
+    text: { primary: ui.gray[900], secondary: ui.gray[500] },
+    divider: ui.gray[200]
   },
-  shape: { borderRadius: 10 },
+  shape: { borderRadius: 8 },
   typography: {
     // Segoe UI 우선: 숫자·영문을 Malgun Gothic 으로 그리면 작은 크기에서 깨져 보인다 (한글은 Malgun 폴백)
     fontFamily: `'Segoe UI', 'Malgun Gothic', '맑은 고딕', -apple-system, Roboto, sans-serif`,
-    button: { textTransform: 'none', fontWeight: 600 }
+    // 전체적으로 한 단계 키움 (기본 14) — 작은 글씨가 깨져 보인다는 피드백
+    fontSize: 15,
+    caption: { fontSize: 13 },
+    button: { textTransform: 'none', fontWeight: 500 }
   },
   components: {
-    MuiButton: { defaultProps: { disableElevation: true } },
-    MuiTooltip: { defaultProps: { arrow: true, enterDelay: 500 } }
+    MuiButton: {
+      defaultProps: { disableElevation: true },
+      styleOverrides: {
+        root: { borderRadius: 8, fontWeight: 500, paddingLeft: 16, paddingRight: 16 },
+        contained: {
+          boxShadow: ui.shadow.xs,
+          '&:hover': { boxShadow: ui.shadow.xs }
+        },
+        // TailAdmin outline 버튼: 흰 배경 + 회색 링 + gray-700 텍스트
+        outlined: {
+          backgroundColor: '#fff',
+          borderColor: ui.gray[300],
+          color: ui.gray[700],
+          '&:hover': { backgroundColor: ui.gray[50], borderColor: ui.gray[300] }
+        },
+        // color="inherit" 텍스트/아웃라인 버튼도 gray-700 톤
+        textInherit: { color: ui.gray[700], '&:hover': { backgroundColor: ui.gray[100] } },
+        outlinedInherit: {
+          backgroundColor: '#fff',
+          borderColor: ui.gray[300],
+          color: ui.gray[700],
+          '&:hover': { backgroundColor: ui.gray[50], borderColor: ui.gray[300] }
+        }
+      }
+    },
+    MuiIconButton: {
+      styleOverrides: {
+        root: { color: ui.gray[700], '&:hover': { backgroundColor: ui.gray[100] } }
+      }
+    },
+    // 인풋/셀렉트: rounded-lg + gray-300 보더 + 포커스 브랜드 링 (shadow-theme-xs)
+    MuiOutlinedInput: {
+      styleOverrides: {
+        root: {
+          borderRadius: 8,
+          backgroundColor: '#fff',
+          boxShadow: ui.shadow.xs,
+          '& .MuiOutlinedInput-notchedOutline': { borderColor: ui.gray[300] },
+          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: ui.gray[400] },
+          '&.Mui-focused': { boxShadow: ui.shadow.focusRing },
+          '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: ui.brand[500], borderWidth: 1 }
+        }
+      }
+    },
+    // 드롭다운/팝오버: rounded-xl + gray-200 보더 + shadow-theme-lg
+    MuiMenu: {
+      defaultProps: { elevation: 0 },
+      styleOverrides: {
+        paper: { borderRadius: 12, border: `1px solid ${ui.gray[200]}`, boxShadow: ui.shadow.lg, marginTop: 4 },
+        list: { padding: 6 }
+      }
+    },
+    MuiPopover: {
+      defaultProps: { elevation: 0 },
+      styleOverrides: {
+        paper: { borderRadius: 12, border: `1px solid ${ui.gray[200]}`, boxShadow: ui.shadow.lg }
+      }
+    },
+    MuiMenuItem: {
+      styleOverrides: {
+        root: {
+          borderRadius: 8,
+          margin: '1px 0',
+          fontSize: 14.5,
+          fontWeight: 500,
+          color: ui.gray[700],
+          '&:hover': { backgroundColor: ui.gray[100] },
+          '&.Mui-selected': { backgroundColor: ui.brand[50], color: ui.brand[500] },
+          '&.Mui-selected:hover': { backgroundColor: ui.brand[100] }
+        }
+      }
+    },
+    // 모달: rounded-2xl + 큰 섀도
+    MuiDialog: {
+      styleOverrides: {
+        paper: { borderRadius: 16, boxShadow: ui.shadow.lg }
+      }
+    },
+    MuiDialogTitle: { styleOverrides: { root: { fontWeight: 700, color: ui.gray[900] } } },
+    // 툴팁: gray-800 + rounded-lg
+    MuiTooltip: {
+      defaultProps: { arrow: true, enterDelay: 500 },
+      styleOverrides: {
+        tooltip: { backgroundColor: ui.gray[800], borderRadius: 8, fontSize: 12.5, fontWeight: 500, padding: '6px 10px' },
+        arrow: { color: ui.gray[800] }
+      }
+    },
+    MuiToggleButtonGroup: {
+      styleOverrides: {
+        root: { backgroundColor: ui.gray[100], borderRadius: 8, padding: 2, gap: 2 }
+      }
+    },
+    MuiToggleButton: {
+      styleOverrides: {
+        root: {
+          border: 0,
+          borderRadius: '6px !important',
+          padding: '4px 12px',
+          color: ui.gray[500],
+          fontWeight: 500,
+          '&:hover': { backgroundColor: ui.gray[200] },
+          '&.Mui-selected': { backgroundColor: '#fff', color: ui.gray[900], boxShadow: ui.shadow.xs },
+          '&.Mui-selected:hover': { backgroundColor: '#fff' }
+        }
+      }
+    },
+    MuiPaper: {
+      styleOverrides: {
+        outlined: { borderColor: ui.gray[200] }
+      }
+    },
+    MuiTab: {
+      styleOverrides: {
+        root: { textTransform: 'none', fontWeight: 500 }
+      }
+    },
+    MuiSelect: {
+      styleOverrides: {
+        select: { fontSize: 14.5 }
+      }
+    }
   }
 })

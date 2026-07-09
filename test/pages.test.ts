@@ -73,3 +73,25 @@ test('appendDocument: 가져온 문서를 끝에 붙인다', () => {
   assert.equal(out[1].docId, 'imported')
   assert.equal(out[2].pageIndex, 1)
 })
+
+test('movePagesToIndex: 드래그 삽입점 기준 이동', async () => {
+  const { insertDocument, movePagesToIndex } = await import('../src/core/pages')
+  const pages = insertDocument([], 'd', 4, 0) // [A,B,C,D]
+  const [a, b, , d] = pages
+  // A를 index 3(=D 앞)으로
+  const moved = movePagesToIndex(pages, new Set([a.id]), 3)
+  assert.deepEqual(moved.map((p) => p.id), [b.id, pages[2].id, a.id, d.id])
+  // 끝으로 이동
+  const end = movePagesToIndex(pages, new Set([a.id]), 4)
+  assert.equal(end[3].id, a.id)
+  // 자기 위치로(변화 없음)
+  const same = movePagesToIndex(pages, new Set([b.id]), 1)
+  assert.deepEqual(same.map((p) => p.id), pages.map((p) => p.id))
+})
+
+test('insertDocument: 중간 삽입', async () => {
+  const { insertDocument } = await import('../src/core/pages')
+  const base = insertDocument([], 'a', 2, 0)
+  const out = insertDocument(base, 'b', 2, 1)
+  assert.deepEqual(out.map((p) => p.docId), ['a', 'b', 'b', 'a'])
+})
