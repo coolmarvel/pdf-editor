@@ -9,6 +9,65 @@ domain: development
 
 git 저장소가 아니므로 이 파일이 **"언제 무슨 일이 있었나"의 SSOT**다. 세션마다 최상단에 블록 추가.
 
+## 2026-07-09 — v1.4.4: 스탬프 프리셋을 Guru 세트(25종)로 전면 교체
+
+**피드백**: guru 스크린샷 4장 + 우리 다이얼로그 1장 — "우리 스탬프 너무 허접, guru 기본 스탬프를 가져와라"
+(→ `feedback-archive/2026-07-09-v1.4.3-stamps/`).
+
+**구현** (`editor/stamp.ts` + `StampDialog.tsx`):
+- `StampSpec` 확장: `shape?: 'rect'|'tagLeft'`, `icon?: 'cross'|'check'`, `autoDateTime?: boolean`.
+- `PRESET_STAMPS` 10 → **25종** (guru 순서/팔레트 근사): 초록(APPROVED/FINAL/COMPLETED)·
+  빨강(NOT APPROVED/VOID/TOP SECRET)·남색(DRAFT/CONFIDENTIAL/FOR (NOT FOR) PUBLIC RELEASE/
+  FOR COMMENT/PRELIMINARY RESULTS/INFORMATION ONLY/AS IS/DEPARTMENTAL/EXPERIMENTAL/EXPIRED/SOLD)·
+  아이콘 ✗(빨강)/✓(초록)·왼쪽 화살표 태그(INITIAL HERE 보라/SIGN HERE 빨강/WITNESS 노랑)·
+  **날짜 자동**(REVISED 남색/REJECTED 빨강 — 찍는 시점의 "MM/DD/YYYY, hh:mm AM/PM" 서브텍스트,
+  `nowStampDateTime()`).
+- `renderStamp`: tagLeft 펜타곤 패스·서브텍스트 줄·아이콘 렌더(굵은 round-cap 스트로크) 추가.
+- 다이얼로그 프리셋 그리드: CSS 흉내 → **실제 renderStamp dataUrl `<img>`** (미리보기=실물 100% 동일,
+  다이얼로그 열릴 때 useMemo 1회 생성). 커스텀 스탬프 팔레트도 guru 톤 6색으로 교체.
+
+**검증**: Playwright 로 다이얼로그 상/하단 + REJECTED 배치 스크린샷 직접 확인 ✅, 전체 E2E(visual+pages) ✅,
+test ✅ → `PDF편집기-Setup-1.4.4.exe` 바탕화면 ✅.
+
+## 2026-07-09 — v1.4.3: 바이트코드 사고 수습 — 난독화 단일 체계로
+
+**사고**: v1.4.2 가 사용자 Windows 에서 시작 즉시 크래시 — "Invalid or incompatible cached data
+(cachedDataRejected)". **V8 바이트코드는 컴파일한 플랫폼에 종속** — WSL(Linux) Electron 이 만든 .jsc 를
+Windows Electron 이 거부. (내 Linux E2E 는 같은 플랫폼이라 통과해서 못 잡음 — **크로스 플랫폼 산출물은
+Linux 검증만으론 불충분**하다는 교훈.)
+
+**수정**: bytecodePlugin 제거(config 에 금지 사유 주석), `scripts/obfuscate.cjs` 로 일원화 —
+main/preload/renderer 전부 난독화(플랫폼 무관 JS). main 3→5KB, preload 1→2KB, renderer 2516→2677KB.
+전체 E2E(visual+pages) ✅ → `PDF편집기-Setup-1.4.3.exe` 바탕화면 ✅.
+
+## 2026-07-09 — v1.4.2: 배포 소스 보호 (바이트코드 + 난독화)
+
+**배경**: 사용자 질문 — 설치본에서 소스 복원 가능? → 가능했음(app.asar 는 단순 아카이브, main 은 미압축,
+renderer 는 minify 만). 라이선스 키는 보류(코드 보호와 별개 문제임을 설명).
+
+**적용** (100% 방지는 불가, "비용 올리기"):
+1. **main/preload → V8 바이트코드** (`electron.vite.config.ts` bytecodePlugin): 배포물은 2줄 로더 +
+   `index.jsc` — 실행 동작 동일, 사람이 읽을 수 없음.
+2. **renderer 난독화** (`scripts/obfuscate-renderer.cjs`, build 파이프라인에 연결 — `npm run build` =
+   electron-vite build + 난독화): hex 식별자 + 문자열 배열(threshold 0.6). **보수 설정** —
+   controlFlowFlattening/deadCodeInjection/selfDefending 등 성능·안정성 위험 옵션 전부 OFF,
+   pdf.worker 제외(공개 라이브러리 + 성능 민감). 결과: 2516→2676KB(+6%), 빌드 +6.7s.
+3. devDep `javascript-obfuscator` 추가. dist:win 등이 `npm run build` 경유하도록 스크립트 정리.
+
+**검증**: 보호 빌드로 전체 E2E(visual+pages) ✅ test 21/21 ✅ — 기능 영향 없음 확인.
+pages-check 의 "페이지 레이아웃" 라벨을 v1.3.6 축약("레이아웃")에 맞게 수정.
+→ `PDF편집기-Setup-1.4.2.exe` 바탕화면 ✅.
+
+## 2026-07-09 — v1.4.1: 연필 컨텍스트 바 Guru 파리티
+
+**피드백** (스크린샷 3장 → `docs/feedback-archive/2026-07-09-v1.4.0-pencil/`): 연필 기능은 완성,
+컨텍스트 바만 Guru 대비 부족 — 채우기·혼합 모드 없음, 기본 2pt vs 5pt.
+
+**수정**: `penStyle` 을 HighlightStyle 타입(fill/blend 포함)으로 승격 — 기본 {5pt, fill null, blend normal}.
+연필 바 = [색][채우기] | [◐] | [≡ 5pt] | [혼합 Normal] (Guru 와 동일, StrokeObj 는 이미 fill/blend 지원).
+transientStroke 연필 경로에 fill/blend 반영. 스크린샷 검수 ✅ 회귀 E2E ✅ test 21/21 ✅
+→ `PDF편집기-Setup-1.4.1.exe` 바탕화면 ✅.
+
 ## 2026-07-09 — v1.4.0: 1.3.x 배치 확정 (사용자 선언)
 
 사용자가 1.3.x(i18n·페이지 기능·형광펜·UI 스킨·규격 통일) OK → **1.4.0 승격** (내용 = 1.3.6 동일).

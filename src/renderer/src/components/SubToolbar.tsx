@@ -561,10 +561,13 @@ export default function SubToolbar(): JSX.Element | null {
       return bar(
         <>
           <PaletteControl icon={<BorderColorRounded />} title={t('color')} value={penStyle.color} onChange={(c) => setPenStyle({ color: c ?? '#2563eb' })} />
+          <PaletteControl icon={<FormatColorFillRounded />} title={t('fillColor')} value={penStyle.fill} onChange={(fill) => setPenStyle({ fill })} allowNone />
           <GDivider />
           <OpacityControl value={penStyle.opacity} onChange={(opacity) => setPenStyle({ opacity })} />
           <GDivider />
           <WidthSelect value={penStyle.width} onChange={(width) => setPenStyle({ width })} />
+          <GDivider />
+          <BlendSelect value={penStyle.blend} onChange={(blend) => setPenStyle({ blend })} />
         </>
       )
     case 'highlight':

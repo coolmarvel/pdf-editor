@@ -62,7 +62,7 @@ export interface PenStyle {
   opacity: number
 }
 
-/** 형광펜: 펜 + 채우기/혼합 모드 (Guru 파리티) */
+/** 펜(연필/형광펜) 공통: 채우기/혼합 모드 포함 (Guru 파리티) */
 export interface HighlightStyle extends PenStyle {
   fill: string | null
   blend: BlendMode
@@ -111,7 +111,7 @@ interface EditorState {
   history: History<Snapshot>
   tool: Tool
   textStyle: TextStyle
-  penStyle: PenStyle
+  penStyle: HighlightStyle
   highlightStyle: HighlightStyle
   eraserStyle: EraserStyle
   shapeStyle: ShapeStyle
@@ -149,7 +149,7 @@ interface EditorState {
   setFileName(n: string): void
   setTool(t: Tool): void
   setTextStyle(p: Partial<TextStyle>): void
-  setPenStyle(p: Partial<PenStyle>): void
+  setPenStyle(p: Partial<HighlightStyle>): void
   setHighlightStyle(p: Partial<HighlightStyle>): void
   setEraserStyle(p: Partial<EraserStyle>): void
   setShapeStyle(p: Partial<ShapeStyle>): void
@@ -262,7 +262,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     history: emptyHistory<Snapshot>(),
     tool: 'select',
     textStyle: DEFAULT_TEXT,
-    penStyle: { color: '#2563eb', width: 0.004, opacity: 1 },
+    penStyle: { color: '#2563eb', width: 5 / 595, opacity: 1, fill: null, blend: 'normal' }, // 5pt (Guru 기본)
     highlightStyle: { color: '#facc15', width: 0.025, opacity: 0.45, fill: null, blend: 'multiply' },
     eraserStyle: { kind: 'rect', stroke: '#ffffff', strokeWidth: 5 / 595, fill: '#ffffff', opacity: 1, dash: 'solid' }, // 5pt (Guru 기본)
     shapeStyle: { stroke: '#2563eb', strokeWidth: 0.004, fill: null, opacity: 1, dash: 'solid' },

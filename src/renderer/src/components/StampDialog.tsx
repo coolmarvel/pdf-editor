@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import Dialog from '@mui/material/Dialog'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -8,7 +8,7 @@ import Typography from '@mui/material/Typography'
 import Checkbox from '@mui/material/Checkbox'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Paper from '@mui/material/Paper'
-import { PRESET_STAMPS, CUSTOM_STAMP_COLORS, renderStamp, type StampSpec } from '@renderer/editor/stamp'
+import { PRESET_STAMPS, CUSTOM_STAMP_COLORS, renderStamp, nowStampDateTime, type StampSpec } from '@renderer/editor/stamp'
 import { useEditor } from '@renderer/store/editor'
 import { useT } from '@renderer/i18n'
 
@@ -24,11 +24,25 @@ export default function StampDialog({ open, onClose }: { open: boolean; onClose:
   const [colorIdx, setColorIdx] = useState(0)
 
   function pick(spec: StampSpec): void {
-    const { dataUrl, aspect } = renderStamp(spec)
+    // REVISED/REJECTED 는 찍는 시점의 날짜·시간이 들어간다 (Guru)
+    const withNow = spec.autoDateTime ? { ...spec, ...nowStampDateTime() } : spec
+    const { dataUrl, aspect } = renderStamp(withNow)
     setPendingImage({ dataUrl, aspect, kind: 'stamp' })
     setTool('stamp')
     onClose()
   }
+
+  // 프리셋 미리보기 = 실제 렌더 결과 (실물과 100% 동일). 다이얼로그 열릴 때 1회 생성
+  const previews = useMemo(
+    () =>
+      open
+        ? PRESET_STAMPS.map((spec) => ({
+            spec,
+            img: renderStamp(spec.autoDateTime ? { ...spec, ...nowStampDateTime() } : spec)
+          }))
+        : [],
+    [open]
+  )
 
   const now = new Date()
   const dateStr = `${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}/${String(now.getFullYear() % 100).padStart(2, '0')}`
@@ -53,17 +67,15 @@ export default function StampDialog({ open, onClose }: { open: boolean; onClose:
         </Stack>
 
         {!custom ? (
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, maxHeight: 420, overflowY: 'auto' }}>
-            {PRESET_STAMPS.map((s) => (
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, maxHeight: 460, overflowY: 'auto', pr: 0.5 }}>
+            {previews.map(({ spec, img }, i) => (
               <Paper
-                key={s.text}
+                key={i}
                 variant="outlined"
-                onClick={() => pick(s)}
-                sx={{ p: 2, display: 'flex', justifyContent: 'center', cursor: 'pointer', '&:hover': { borderColor: 'secondary.main' } }}
+                onClick={() => pick(spec)}
+                sx={{ p: 2, display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'pointer', minHeight: 84, '&:hover': { borderColor: 'secondary.main', bgcolor: '#f9fafb' } }}
               >
-                <Box sx={{ border: `2.5px solid ${s.color}`, bgcolor: s.bg, color: s.color, px: 2, py: 0.6, borderRadius: 1.5, fontWeight: 800, fontStyle: 'italic', fontSize: 15, whiteSpace: 'nowrap' }}>
-                  {s.text}
-                </Box>
+                <img src={img.dataUrl} style={{ maxWidth: '92%', maxHeight: spec.icon ? 56 : 46, objectFit: 'contain' }} />
               </Paper>
             ))}
           </Box>

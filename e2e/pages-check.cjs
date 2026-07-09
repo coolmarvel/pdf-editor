@@ -84,7 +84,7 @@ async function main() {
   await win.waitForTimeout(600) // 메뉴 백드롭 완전 종료 대기
 
   // ── 레이아웃 패널 ──
-  await win.click('button:has-text("페이지 레이아웃")')
+  await win.click('button:has-text("레이아웃")')
   await win.waitForTimeout(300)
   await win.screenshot({ path: path.join(OUT, 'l8-layout-panel.png') })
   // 두 쪽 보기
@@ -94,7 +94,7 @@ async function main() {
   await win.waitForTimeout(300)
   await win.screenshot({ path: path.join(OUT, 'l9-double-mode.png') })
   // 한 장씩 보기
-  await win.click('button:has-text("페이지 레이아웃")')
+  await win.click('button:has-text("레이아웃")')
   await win.waitForTimeout(300)
   await win.click('[data-testid="CropDinRoundedIcon"]')
   await win.waitForTimeout(400)

@@ -206,6 +206,8 @@ export default function PageCanvas({ page, zoom }: Props): JSX.Element {
       color: penStyle.color,
       width: penStyle.width,
       opacity: penStyle.opacity,
+      fill: penStyle.fill,
+      blend: penStyle.blend,
       points
     }
   }

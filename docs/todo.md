@@ -9,8 +9,8 @@ domain: development
 
 ## P1 — 다음 릴리스에서 다뤄야 함
 
-- [ ] **다음 기능 선정 (1.4.x)**: P2 후보 — Search(문서 내 검색) / 워터마크 / Document Crop /
-      Annotations 아이콘 세트 / 이미지·스탬프·서명 다듬기
+- [ ] **사용자 v1.4.4 설치 테스트** — 스탬프 프리셋 25종(Guru 세트). 이어서 1.4.x 후보:
+      Search / 워터마크 / Document Crop / Annotations 아이콘 세트 / 서명 다듬기
 - [ ] 혼합 모드 저장 결과 실물 검증 — Adobe/크롬 뷰어에서 화면과 동일한지 (백드롭 래스터 조각 방식)
 - [ ] 지우개 도형 종류 확장 검토 (Guru: Line/Arrow/Polygon/Polyline — 현재 사각형/원)
 - [ ] 테두리 선 스타일에 물결(scalloped/wavy) 추가 검토 (Guru 지원, 현재 실선/점선/파선)
