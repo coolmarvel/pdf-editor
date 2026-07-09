@@ -16,11 +16,11 @@ pdfguru.com 을 벤치마킹한 **오프라인 데스크톱 PDF 편집기**. 문
 
 | 층 | 기술 |
 |---|---|
-| 셸 | Electron 33 + electron-vite |
+| 셸 | Electron 43 + electron-vite |
 | UI | React 18 + TypeScript + MUI 6 + zustand |
 | PDF 렌더 | pdf.js (pdfjs-dist) |
 | PDF 저장 | pdf-lib (평탄화 + 오버레이 굽기 + 주석) |
-| 배포 | electron-builder NSIS (WSL에서 Wine으로 빌드) |
+| 배포 | electron-builder NSIS(Windows) + custom DMG script(macOS) |
 
 ## 개발
 
@@ -30,6 +30,7 @@ npm run dev        # HMR 개발 모드
 npm run typecheck  # 타입 검사
 npm test           # core 순수 로직 테스트
 npm run dist:win   # 인스톨러 → release/PDF편집기-Setup-<version>.exe
+npm run dist:mac   # DMG → release/PDF편집기-<version>-arm64.dmg
 
 # 시각 자가검증 (Playwright + WSLg 디스플레이, npm run build 후):
 node e2e/visual-check.cjs   # 앱 구동→PDF 열기→텍스트 배치/편집/세션 흐름 스크린샷 + 픽셀 계측

@@ -1,13 +1,75 @@
 ---
 title: 세션 로그
 created: 2026-07-08
-updated: 2026-07-08
+updated: 2026-07-09
 domain: development
 ---
 
 # 세션 로그 (최신이 위)
 
 git 저장소가 아니므로 이 파일이 **"언제 무슨 일이 있었나"의 SSOT**다. 세션마다 최상단에 블록 추가.
+
+## 2026-07-09 — v1.4.8: Sign 다이얼로그 Guru 화면 구조 반영
+
+**피드백**: 사용자가 Codex 대화에 PDF Guru Sign 화면 7장을 직접 첨부. 모두 Guru 참고 이미지이며,
+다크모드 캡처라 색은 구조 참고로 보고 우리 앱 톤에 맞춰 반영 요청.
+
+**수정**:
+- 첨부 캡처 7장을 `pdf-guru-screenshots/2026-07-09-sign-*.png` 로 분류.
+- `SignDialog.tsx`를 Guru 흐름에 맞춰 재구성: 저장된 서명이 있으면 **Signatures 목록 화면**을 먼저 표시,
+  `Add signature`로 Draw/Image/Type 편집 화면 진입.
+- 저장 서명은 큰 2열 카드로 표시하고, 카드 우상단 삭제 버튼 추가(`removeSavedSign`).
+- Draw: 어두운 모달 + 큰 밝은 서명 캔버스 + 색상 스와치 + Clear Signature.
+- Image: 드래그/선택 업로드 영역, 선택 후 체크보드 배경 미리보기, Clear Signature.
+- Type: 밝은 입력 프리뷰, 4개 서체 2×2 선택 그리드, 색상 스와치.
+
+**피드백 정리**: `docs/feedback-archive/2026-07-09-v1.4.8-sign-guru/` 로 캡처 7장 이동 완료.
+
+**검증**: typecheck ✅, test 21/21 ✅, build ✅. Electron 실화면 검증으로 Draw/Type 모달 스크린샷 확인 ✅.
+`dist:mac` 는 앱 번들 생성·ad-hoc codesign·`Info.plist` 확인까지 정상이나, sandbox/권한 제한으로
+`hdiutil: create failed - 장치가 구성되지 않았음` 에서 DMG 생성 실패. 현재 산출물은
+`release/mac-arm64/PDF 편집기.app` (version 1.4.8, bundle id `seonghyunlee.pdfeditor`) 까지 생성됨.
+
+## 2026-07-09 — v1.4.7: X/체크 도구 커서 모양 반영
+
+**요청**: X표시/체크표시는 기능 수정 없이, 도구 활성 시 마우스 모양이 X/체크로 보이게.
+
+**수정**: `PageCanvas.tsx`에 X/체크 전용 SVG 커서를 추가. 도구 색상(`shapeStyle.stroke`)을 따라가며
+핫스팟은 중앙(16,16)으로 둬 클릭 위치와 배치 위치가 어긋나지 않게 했다.
+
+**검증**: typecheck ✅, test 21/21 ✅, build ✅, `dist:mac` ✅.
+앱 5초 이상 실행 유지 ✅ → `PDF편집기-1.4.7-arm64.dmg` 바탕화면 복사 ✅.
+
+## 2026-07-09 — v1.4.6: 앱 식별자 seonghyunlee.pdfeditor 로 변경
+
+**요청**: macOS 번들 내부 식별자가 `xyz.chungmu.pdfeditor` 로 남아 있던 것을 개인 식별자로 변경.
+
+**수정**: `package.json`의 `build.appId` 를 `seonghyunlee.pdfeditor` 로 변경. 이 값은 macOS
+`CFBundleIdentifier` 와 Electron Builder 앱 식별자에 반영된다.
+
+**검증**: typecheck ✅, test 21/21 ✅, build ✅, `dist:mac` ✅.
+`Info.plist` 확인: `CFBundleIdentifier=seonghyunlee.pdfeditor`, `CFBundleExecutable=PDFEditor`,
+`CFBundleDisplayName=PDF 편집기`, version `1.4.6` ✅. 앱 5초 이상 실행 유지 ✅ → 바탕화면 DMG 복사 ✅.
+
+## 2026-07-09 — v1.4.5: macOS DMG 실행 크래시 수정
+
+**피드백**: macOS DMG 를 Applications 에 설치 후 실행하면 "PDF 편집기 응용 프로그램이 예기치 않게 종료" 크래시.
+크래시 리포트는 `CrBrowserMain` / `EXC_BREAKPOINT(SIGTRAP)` / V8 스택으로, 앱 코드 로그 없이 종료.
+
+**원인**: Electron macOS 번들의 내부 제품명/실행 파일명/helper 앱 이름에 한글(`PDF 편집기`)이 들어가면
+Electron 이 helper/앱 리소스 로드 단계에서 깨짐. `app.asar` 자체는 개발용 Electron 으로 정상 로드됐고,
+내부 제품명을 `PDFEditor` 로 통일한 테스트 번들은 정상 실행. 외부 `.app` 폴더명은 한글이어도 안전.
+
+**수정**:
+- Electron 런타임 `33.4.11` → `43.1.0` 업데이트(Node 24 LTS 계열과 맞춤).
+- `scripts/dist-mac.cjs` 추가: `electron-builder --mac --dir` 를 내부 제품명 `PDFEditor` 로 실행 →
+  외부 앱 폴더만 `PDF 편집기.app` 로 rename → Developer ID 전까지 ad-hoc codesign →
+  `hdiutil` 로 `PDF편집기-<version>-arm64.dmg` 직접 생성.
+- `dist:mac` 는 이제 위 스크립트를 사용. Windows productName/NSIS 설정은 기존 한글 유지.
+
+**검증**: typecheck ✅, test 21/21 ✅, build ✅, `dist:mac` ✅. 생성된
+`PDF편집기-1.4.5-arm64.dmg` 를 실제 마운트 → 내부 `PDF 편집기.app` codesign 검증 ✅ →
+앱 5초 이상 실행 유지(시작 즉시 크래시 없음) ✅ → 바탕화면 복사 ✅.
 
 ## 2026-07-09 — v1.4.4: 스탬프 프리셋을 Guru 세트(25종)로 전면 교체
 

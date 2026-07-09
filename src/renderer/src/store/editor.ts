@@ -154,6 +154,7 @@ interface EditorState {
   setEraserStyle(p: Partial<EraserStyle>): void
   setShapeStyle(p: Partial<ShapeStyle>): void
   addSavedSign(dataUrl: string): void
+  removeSavedSign(index: number): void
   setSelected(s: { pageId: string; objectId: ObjectId } | null): void
   setPendingImage(p: { dataUrl: string; aspect: number; kind: 'image' | 'stamp' | 'sign' } | null): void
   /** 데이터 변경 없이 현재 상태를 히스토리에 쌓는다 (드래그 시작 시점) */
@@ -387,6 +388,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     setEraserStyle: (p) => set((s) => ({ eraserStyle: { ...s.eraserStyle, ...p } })),
     setShapeStyle: (p) => set((s) => ({ shapeStyle: { ...s.shapeStyle, ...p } })),
     addSavedSign: (dataUrl) => set((s) => ({ savedSigns: [...s.savedSigns, dataUrl] })),
+    removeSavedSign: (index) => set((s) => ({ savedSigns: s.savedSigns.filter((_, i) => i !== index) })),
     setSelected: (selected) => set({ selected }),
     setPendingImage: (pendingImage) => set({ pendingImage }),
     markHistory() {

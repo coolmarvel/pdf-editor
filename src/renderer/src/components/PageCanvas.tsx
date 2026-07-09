@@ -69,6 +69,19 @@ const eraseCursorSvg = (px: number): string =>
   `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='${px}' height='${px}' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='8.5' fill='none' stroke='white' stroke-width='3.2'/%3E%3Ccircle cx='12' cy='12' r='8.5' fill='none' stroke='%231f2430' stroke-width='1.5'/%3E%3C/svg%3E")`
 const ERASE_CURSOR = `-webkit-image-set(${eraseCursorSvg(24)} 1x, ${eraseCursorSvg(48)} 2x) 12 12, auto`
 
+/** X/체크 도구 커서: 배치될 모양 그대로 노출한다. */
+const markCursorSvg = (kind: 'cross' | 'check', color: string, px: number): string => {
+  const stroke = color || '#2563eb'
+  const path =
+    kind === 'cross'
+      ? "<path d='M8 8 L24 24 M24 8 L8 24' />"
+      : "<path d='M7 17 L14 24 L25 8' />"
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${px}' height='${px}' viewBox='0 0 32 32'><g fill='none' stroke-linecap='round' stroke-linejoin='round'><g stroke='white' stroke-width='7'>${path}</g><g stroke='${stroke}' stroke-width='4'>${path}</g></g></svg>`
+  return `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}")`
+}
+const MARK_CURSOR = (kind: 'cross' | 'check', color: string): string =>
+  `-webkit-image-set(${markCursorSvg(kind, color, 32)} 1x, ${markCursorSvg(kind, color, 64)} 2x) 16 16, default`
+
 /** 페이지 1장 = PDF 캔버스 + 객체 오버레이 + 인터랙션 레이어 */
 export default function PageCanvas({ page, zoom }: Props): JSX.Element {
   const t = useT()
@@ -817,7 +830,9 @@ export default function PageCanvas({ page, zoom }: Props): JSX.Element {
               : 'default'
             : tool === 'highlight'
               ? ERASE_CURSOR // 형광펜도 빈 원 브러시 커서 (사용자 요청)
-              : 'crosshair'
+              : tool === 'cross' || tool === 'check'
+                ? MARK_CURSOR(tool, shapeStyle.stroke)
+                : 'crosshair'
 
   const noteObj = notePop ? (objects.find((o) => o.id === notePop.objectId) as NoteObj | undefined) : undefined
   const linkObj = linkPop ? (objects.find((o) => o.id === linkPop.objectId) as LinkObj | undefined) : undefined

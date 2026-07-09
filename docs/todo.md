@@ -1,7 +1,7 @@
 ---
 title: TODO
 created: 2026-07-08
-updated: 2026-07-08
+updated: 2026-07-09
 domain: development
 ---
 
@@ -9,8 +9,13 @@ domain: development
 
 ## P1 — 다음 릴리스에서 다뤄야 함
 
-- [ ] **사용자 v1.4.4 설치 테스트** — 스탬프 프리셋 25종(Guru 세트). 이어서 1.4.x 후보:
-      Search / 워터마크 / Document Crop / Annotations 아이콘 세트 / 서명 다듬기
+- [ ] **사용자 v1.4.8 설치 테스트** — macOS DMG(Applications 설치/실행) 및 Sign 다이얼로그 실물 확인.
+      이어서 1.4.x 후보:
+      Search / 워터마크 / Document Crop / Annotations 아이콘 세트
+- [ ] v1.4.8 DMG 생성 재시도 — 코드/앱 번들/서명 검증은 통과했으나 현재 세션에서 `hdiutil` 장치 접근 제한으로
+      `PDF편집기-1.4.8-arm64.dmg` 생성과 Desktop 복사가 막힘
+- [ ] macOS Developer ID 인증서 발급 후 정식 codesign + notarization 적용
+- [ ] 저장 서명 영속화 검토 — 현재는 앱 세션 중에만 유지
 - [ ] 혼합 모드 저장 결과 실물 검증 — Adobe/크롬 뷰어에서 화면과 동일한지 (백드롭 래스터 조각 방식)
 - [ ] 지우개 도형 종류 확장 검토 (Guru: Line/Arrow/Polygon/Polyline — 현재 사각형/원)
 - [ ] 테두리 선 스타일에 물결(scalloped/wavy) 추가 검토 (Guru 지원, 현재 실선/점선/파선)
