@@ -10,6 +10,20 @@ domain: development
 이 파일이 **"언제 무슨 일이 있었나"의 SSOT**다. 세션마다 최상단에 블록 추가.
 (2026-07-08부터 git 에 올리지만 커밋/푸시는 사용자가 직접·성긴 단위 — git history 를 이력 SSOT 로 삼지 않는다.)
 
+## 2026-07-10 — 릴리스 업로드 스크립트 정리 (코드 변경 없음, v1.5.2 유지)
+
+**배경**: 포트폴리오 세션(`~/coolmarvel_portfolio`)이 사이트 다운로드 링크용으로 이 저장소에
+GitHub Release 업로드 스크립트를 버전 하드코딩 복사본으로 쌓아 왔음
+(`upload-release.sh` v1.4.3 / `upload-release-mac.sh` v1.4.7 / `upload-release-win.sh` 1.5.2 기본).
+GitHub 릴리스 실태: v1.4.3·v1.5.2(exe)는 존재, v1.4.7(mac)은 미생성 — 포트폴리오 mac 링크는 주석 상태.
+
+**정리**: win/mac 두 스크립트로 통합·파라미터화(버전 기본 = package.json), **get-or-create** 로직 추가 —
+같은 태그 릴리스가 이미 있으면 자산만 추가 (기존 mac 스크립트는 릴리스 생성만 해서 v1.5.2 처럼
+win 이 먼저 올라간 태그에선 422 실패했을 것). 하드코딩 `upload-release.sh` 삭제.
+절차는 `docs/guides/packaging.md` "GitHub Release 업로드" 절에 기록.
+
+**검증**: bash -n 문법 ✅, 토큰 가드·package.json 버전 해석 ✅ (실제 업로드는 토큰 필요 시점에).
+
 ## 2026-07-10 — v1.5.2: X/체크 사전 크기 조절·검정 기본 + 워터마크 커서 + ESC 도구 해제
 
 **피드백** (구두, v1.5.1 확인 후): ① X/체크가 커서 미리보기보다 크게 찍힘 — 찍기 전에 컨텍스트 바에서

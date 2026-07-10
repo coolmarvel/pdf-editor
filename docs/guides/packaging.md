@@ -1,7 +1,7 @@
 ---
 title: 배포 패키징 가이드
 created: 2026-07-09
-updated: 2026-07-09
+updated: 2026-07-10
 domain: packaging
 ---
 
@@ -54,8 +54,25 @@ macOS 번들의 내부 이름은 반드시 ASCII `PDFEditor`를 유지한다.
 Developer ID 인증서가 아직 없으므로 `scripts/dist-mac.cjs`는 DMG 생성 전 ad-hoc `codesign --sign -`으로
 내부 프레임워크 서명을 정리한다. 정식 배포 전에는 `Developer ID Application` 인증서와 notarization을 추가한다.
 
+## GitHub Release 업로드 (포트폴리오 다운로드 링크용)
+
+`coolmarvel_portfolio` 사이트가 `coolmarvel/pdf-editor` GitHub Releases 의 자산 URL 을 다운로드 링크로 쓴다.
+인스톨러를 구운 뒤 공개 배포가 필요하면:
+
+```bash
+bash scripts/upload-release-win.sh <classic token> [버전]   # exe (WSL, release/ 산출물)
+bash scripts/upload-release-mac.sh <classic token> [버전] [dmg 경로]   # dmg (맥 또는 WSL)
+```
+
+- 버전 생략 시 `package.json` 값. 두 스크립트 모두 **같은 태그의 릴리스가 있으면 자산만 추가**
+  (win/mac 어느 쪽이 먼저 올라가도 안전).
+- 자산 이름은 ASCII (`PDF-Editor-Setup-<v>.exe`, `PDF-Editor-<v>-arm64.dmg`) — 포트폴리오 링크와 1:1.
+- 2026-07-10: v1.4.7 mac 스크립트가 버전 하드코딩이라 릴리스마다 복사본이 쌓이던 것을 파라미터화로 정리
+  (하드코딩 `upload-release.sh` 삭제).
+
 ## 관련 코드
 
 - `package.json`: npm scripts, electron-builder 기본 설정
 - `scripts/dist-mac.cjs`: macOS DMG 생성 후처리
+- `scripts/upload-release-win.sh` / `upload-release-mac.sh`: GitHub Release 업로드
 - `build/icon.png`, `build/icon.ico`: 앱/설치 아이콘
