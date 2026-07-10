@@ -25,6 +25,7 @@ import CircleOutlined from '@mui/icons-material/CircleOutlined'
 import CloseRounded from '@mui/icons-material/CloseRounded'
 import CheckRounded from '@mui/icons-material/CheckRounded'
 import DrawRounded from '@mui/icons-material/DrawRounded'
+import BrandingWatermarkOutlined from '@mui/icons-material/BrandingWatermarkOutlined'
 import ChatBubbleOutlineRounded from '@mui/icons-material/ChatBubbleOutlineRounded'
 import LinkRounded from '@mui/icons-material/LinkRounded'
 import RotateLeftRounded from '@mui/icons-material/RotateLeftRounded'
@@ -213,6 +214,7 @@ export default function Toolbar(p: ToolbarProps): JSX.Element {
       <ToolBtn label={t('cross')} icon={<CloseRounded />} active={is('cross')} onClick={() => toggle('cross')} />
       <ToolBtn label={t('check')} icon={<CheckRounded />} active={is('check')} onClick={() => toggle('check')} />
       <ToolBtn label={t('sign')} icon={<DrawRounded />} active={is('sign')} onClick={p.onOpenSign} />
+      <ToolBtn label={t('watermark')} icon={<BrandingWatermarkOutlined />} active={is('watermark')} onClick={() => toggle('watermark')} />
       <ToolBtn label={t('note')} icon={<ChatBubbleOutlineRounded />} active={is('note')} onClick={() => toggle('note')} />
       <ToolBtn label={t('link')} icon={<LinkRounded />} active={is('link')} onClick={() => toggle('link')} />
 

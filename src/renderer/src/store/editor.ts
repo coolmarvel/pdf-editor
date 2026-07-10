@@ -39,6 +39,7 @@ export type Tool =
   | 'cross'
   | 'check'
   | 'sign'
+  | 'watermark'
   | 'note'
   | 'link'
 
@@ -74,6 +75,30 @@ export interface ShapeStyle {
   fill: string | null
   opacity: number
   dash: DashStyle
+}
+
+/** X/체크 표시 도구 설정 — 찍기 전에 크기·색을 정한다 (2026-07-10 피드백. 기본 검정) */
+export interface MarkStyle {
+  color: string
+  /** 마크 폭 = 페이지 폭 대비 비율 */
+  size: number
+}
+
+/** 워터마크 도구 설정 (컨텍스트 바) — 적용 시 WatermarkObj 로 페이지에 박힌다 */
+export interface WatermarkStyle {
+  mode: 'text' | 'image'
+  text: string
+  font: string
+  color: string
+  /** 업로드한 이미지 (image 모드) */
+  image: { dataUrl: string; aspect: number } | null
+  opacity: number
+  /** 시계방향 회전(도) */
+  angle: number
+  /** 마크 폭 = 페이지 폭 대비 비율 */
+  scale: number
+  layout: 'single' | 'tile'
+  scope: 'all' | 'current'
 }
 
 /** 지우개(흰 도형으로 덮기) 설정 — pdfguru 의 Eraser: 도형 기반, 테두리/채우기/스타일 변경 가능 */
@@ -115,6 +140,8 @@ interface EditorState {
   highlightStyle: HighlightStyle
   eraserStyle: EraserStyle
   shapeStyle: ShapeStyle
+  markStyle: MarkStyle
+  watermarkStyle: WatermarkStyle
   /** 저장해 둔 서명 이미지들 (dataUrl) */
   savedSigns: string[]
   selected: { pageId: string; objectId: ObjectId } | null
@@ -153,8 +180,16 @@ interface EditorState {
   setHighlightStyle(p: Partial<HighlightStyle>): void
   setEraserStyle(p: Partial<EraserStyle>): void
   setShapeStyle(p: Partial<ShapeStyle>): void
+  setMarkStyle(p: Partial<MarkStyle>): void
+  setWatermarkStyle(p: Partial<WatermarkStyle>): void
+  /** 워터마크를 scope(전체/현재 페이지)에 한 번의 히스토리 커밋으로 적용 */
+  applyWatermark(dataUrl: string, aspect: number): void
+  /** 문서 전체의 워터마크 객체 일괄 제거 (한 커밋) */
+  removeAllWatermarks(): void
   addSavedSign(dataUrl: string): void
   removeSavedSign(index: number): void
+  /** 서명을 현재 페이지에 바로 배치 (Guru: Done 즉시 노출, 클릭 대기 없음). at = 페이지 정규화 좌표(기본 중앙) */
+  placeSignOnCurrentPage(dataUrl: string, aspect: number, at?: { x: number; y: number }): void
   setSelected(s: { pageId: string; objectId: ObjectId } | null): void
   setPendingImage(p: { dataUrl: string; aspect: number; kind: 'image' | 'stamp' | 'sign' } | null): void
   /** 데이터 변경 없이 현재 상태를 히스토리에 쌓는다 (드래그 시작 시점) */
@@ -218,6 +253,25 @@ function snap(s: EditorState): Snapshot {
   return { pages: s.pages, objectsByPage: s.objectsByPage, displaySizes: s.displaySizes }
 }
 
+const SAVED_SIGNS_KEY = 'savedSigns'
+
+function loadSavedSigns(): string[] {
+  try {
+    const arr = JSON.parse(localStorage.getItem(SAVED_SIGNS_KEY) ?? '[]')
+    return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function persistSavedSigns(signs: string[]): void {
+  try {
+    localStorage.setItem(SAVED_SIGNS_KEY, JSON.stringify(signs))
+  } catch {
+    // 용량 초과 등 — 저장 실패해도 세션 내 목록은 유지
+  }
+}
+
 const rectEq = (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }): boolean =>
   a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h
 
@@ -267,7 +321,20 @@ export const useEditor = create<EditorState>()((set, get) => {
     highlightStyle: { color: '#facc15', width: 0.025, opacity: 0.45, fill: null, blend: 'multiply' },
     eraserStyle: { kind: 'rect', stroke: '#ffffff', strokeWidth: 5 / 595, fill: '#ffffff', opacity: 1, dash: 'solid' }, // 5pt (Guru 기본)
     shapeStyle: { stroke: '#2563eb', strokeWidth: 0.004, fill: null, opacity: 1, dash: 'solid' },
-    savedSigns: [],
+    markStyle: { color: '#111111', size: 16 / 595 }, // 기본 16pt·검정
+    watermarkStyle: {
+      mode: 'text',
+      text: '',
+      font: 'Helvetica',
+      color: '#9ca3af',
+      image: null,
+      opacity: 0.35,
+      angle: -30,
+      scale: 0.5,
+      layout: 'single',
+      scope: 'all'
+    },
+    savedSigns: loadSavedSigns(),
     selected: null,
     pendingImage: null,
     currentPage: 0,
@@ -387,8 +454,76 @@ export const useEditor = create<EditorState>()((set, get) => {
     setHighlightStyle: (p) => set((s) => ({ highlightStyle: { ...s.highlightStyle, ...p } })),
     setEraserStyle: (p) => set((s) => ({ eraserStyle: { ...s.eraserStyle, ...p } })),
     setShapeStyle: (p) => set((s) => ({ shapeStyle: { ...s.shapeStyle, ...p } })),
-    addSavedSign: (dataUrl) => set((s) => ({ savedSigns: [...s.savedSigns, dataUrl] })),
-    removeSavedSign: (index) => set((s) => ({ savedSigns: s.savedSigns.filter((_, i) => i !== index) })),
+    setMarkStyle: (p) => set((s) => ({ markStyle: { ...s.markStyle, ...p } })),
+    setWatermarkStyle: (p) => set((s) => ({ watermarkStyle: { ...s.watermarkStyle, ...p } })),
+    applyWatermark(dataUrl, aspect) {
+      const s = get()
+      const ws = s.watermarkStyle
+      const targets = ws.scope === 'all' ? s.pages : [s.pages[s.currentPage]].filter(Boolean)
+      if (targets.length === 0) return
+      const objectsByPage = { ...s.objectsByPage }
+      for (const pg of targets) {
+        const size = s.displaySizes[pg.id]
+        if (!size) continue
+        const wN = ws.scale
+        const hN = (wN * size.w) / aspect / size.h
+        const obj: PageObject = {
+          id: newId(),
+          type: 'watermark',
+          rect: { x: 0.5 - wN / 2, y: 0.5 - hN / 2, w: wN, h: hN },
+          dataUrl,
+          angle: ws.angle,
+          layout: ws.layout,
+          opacity: ws.opacity
+        }
+        objectsByPage[pg.id] = [...(objectsByPage[pg.id] ?? []), obj]
+      }
+      commit({ objectsByPage, selected: null })
+    },
+    removeAllWatermarks() {
+      const s = get()
+      const hasAny = Object.values(s.objectsByPage).some((list) => list.some((o) => o.type === 'watermark'))
+      if (!hasAny) return
+      const objectsByPage = Object.fromEntries(
+        Object.entries(s.objectsByPage).map(([k, list]) => [k, list.filter((o) => o.type !== 'watermark')])
+      )
+      commit({ objectsByPage, selected: null })
+    },
+    addSavedSign(dataUrl) {
+      const savedSigns = [...get().savedSigns, dataUrl]
+      persistSavedSigns(savedSigns)
+      set({ savedSigns })
+    },
+    removeSavedSign(index) {
+      const savedSigns = get().savedSigns.filter((_, i) => i !== index)
+      persistSavedSigns(savedSigns)
+      set({ savedSigns })
+    },
+    placeSignOnCurrentPage(dataUrl, aspect, at) {
+      const s = get()
+      const page = s.pages[s.currentPage]
+      const size = page ? s.displaySizes[page.id] : undefined
+      if (!page || !size) return
+      const wN = 0.28 // PageCanvas 클릭 배치와 동일한 기본 폭
+      const hN = (wN * size.w) / aspect / size.h
+      // 페이지 밖으로 나가지 않게 중심 클램프
+      const cx = Math.min(1 - wN / 2, Math.max(wN / 2, at?.x ?? 0.5))
+      const cy = Math.min(Math.max(0, 1 - hN / 2), Math.max(hN / 2, at?.y ?? 0.5))
+      const obj: PageObject = {
+        id: newId(),
+        type: 'image',
+        kind: 'sign',
+        rect: { x: cx - wN / 2, y: cy - hN / 2, w: wN, h: hN },
+        dataUrl,
+        opacity: 1
+      }
+      commit({
+        objectsByPage: { ...s.objectsByPage, [page.id]: [...(s.objectsByPage[page.id] ?? []), obj] },
+        tool: 'select',
+        selected: { pageId: page.id, objectId: obj.id },
+        pendingImage: null
+      })
+    },
     setSelected: (selected) => set({ selected }),
     setPendingImage: (pendingImage) => set({ pendingImage }),
     markHistory() {

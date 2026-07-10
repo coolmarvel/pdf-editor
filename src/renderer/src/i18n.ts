@@ -166,7 +166,24 @@ const ko = {
   namePlaceholder: '이름 입력',
   savedSigns: '저장된 서명:',
   saveSign: '서명 저장',
-  clear: '지우기'
+  clear: '지우기',
+  // 워터마크
+  watermark: '워터마크',
+  wmText: '텍스트',
+  wmImage: '이미지',
+  wmTextPlaceholder: '워터마크 문구 입력',
+  wmAngle: '기울기',
+  wmSize: '크기',
+  wmLayout: '배치',
+  wmSingle: '단일',
+  wmTile: '바둑판',
+  wmScope: '범위',
+  wmAllPages: '전체 페이지',
+  wmCurrentPage: '현재 페이지',
+  wmApply: '적용',
+  wmRemoveAll: '모두 제거',
+  wmChooseImage: '이미지 선택',
+  hintWatermark: '문구나 이미지를 정하고 적용을 누르세요'
 }
 
 const en: Record<keyof typeof ko, string> = {
@@ -314,7 +331,23 @@ const en: Record<keyof typeof ko, string> = {
   namePlaceholder: 'Type your name',
   savedSigns: 'Saved signatures:',
   saveSign: 'Save signature',
-  clear: 'Clear'
+  clear: 'Clear',
+  watermark: 'Watermark',
+  wmText: 'Text',
+  wmImage: 'Image',
+  wmTextPlaceholder: 'Watermark text',
+  wmAngle: 'Angle',
+  wmSize: 'Size',
+  wmLayout: 'Layout',
+  wmSingle: 'Single',
+  wmTile: 'Tile',
+  wmScope: 'Pages',
+  wmAllPages: 'All pages',
+  wmCurrentPage: 'Current page',
+  wmApply: 'Apply',
+  wmRemoveAll: 'Remove all',
+  wmChooseImage: 'Choose image',
+  hintWatermark: 'Set text or image, then press Apply'
 }
 
 export type I18nKey = keyof typeof ko

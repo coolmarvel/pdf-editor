@@ -35,7 +35,9 @@ async function burnOverlayPng(objects: PageObject[], dw: number, dh: number, ref
   const drawable = objects.filter((o) => o.type !== 'link' && o.type !== 'note')
   if (drawable.length === 0) return null
   // 이미지 객체 사전 로드
-  await Promise.all(drawable.filter((o) => o.type === 'image').map((o) => preloadImage((o as { dataUrl: string }).dataUrl)))
+  await Promise.all(
+    drawable.filter((o) => o.type === 'image' || o.type === 'watermark').map((o) => preloadImage((o as { dataUrl: string }).dataUrl))
+  )
   const canvas = document.createElement('canvas')
   const scale = Math.min(BURN_SCALE, 4000 / Math.max(dw, dh))
   const W = Math.round(dw * scale)

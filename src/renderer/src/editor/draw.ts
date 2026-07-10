@@ -4,7 +4,7 @@
  * mode 'editor': 링크 영역·노트 아이콘도 표시(화면 안내용).
  * mode 'export': 링크/노트는 그리지 않는다 — 저장 시 실제 PDF 주석(Annot)으로 들어가기 때문.
  */
-import type { PageObject, TextObj, EditTextObj, StrokeObj, ShapeObj, Rect, BlendMode } from '@core/objects'
+import type { PageObject, TextObj, EditTextObj, StrokeObj, ShapeObj, WatermarkObj, Rect, BlendMode } from '@core/objects'
 
 /**
  * 객체의 실효 혼합 모드. 'normal' 이 아니면 백드롭(페이지 픽셀) 위에서 합성해야
@@ -207,6 +207,45 @@ export function preloadImage(dataUrl: string): Promise<HTMLImageElement> {
   })
 }
 
+/** 워터마크: rect = 중앙 셀. single 은 그 자리에 1개, tile 은 벽돌 패턴으로 페이지 전체 반복 */
+function drawWatermark(ctx: CanvasRenderingContext2D, wm: WatermarkObj, W: number, H: number): void {
+  const img = imgCache.get(wm.dataUrl)
+  if (!img || !img.complete) return
+  const w = wm.rect.w * W
+  const h = wm.rect.h * H
+  if (w <= 0 || h <= 0) return
+  ctx.save()
+  ctx.globalAlpha = wm.opacity
+  const drawCell = (cx: number, cy: number): void => {
+    ctx.save()
+    ctx.translate(cx, cy)
+    ctx.rotate((wm.angle * Math.PI) / 180)
+    ctx.drawImage(img, -w / 2, -h / 2, w, h)
+    ctx.restore()
+  }
+  if (wm.layout === 'single') {
+    drawCell(wm.rect.x * W + w / 2, wm.rect.y * H + h / 2)
+  } else {
+    // 중앙 셀 위치를 그대로 포함하는 격자로 반복 (선택 히트테스트 = 중앙 셀과 어긋나지 않게)
+    const cx0 = wm.rect.x * W + w / 2
+    const cy0 = wm.rect.y * H + h / 2
+    const stepX = w + 0.08 * W
+    const stepY = h + 0.1 * H
+    const pad = Math.max(w, h) // 회전으로 삐져나오는 가장자리까지 커버
+    const rowFrom = Math.floor((-pad - cy0) / stepY)
+    const rowTo = Math.ceil((H + pad - cy0) / stepY)
+    for (let r = rowFrom; r <= rowTo; r++) {
+      const offX = r % 2 === 0 ? 0 : stepX / 2 // 벽돌(엇갈림) 패턴
+      const colFrom = Math.floor((-pad - cx0 - offX) / stepX)
+      const colTo = Math.ceil((W + pad - cx0 - offX) / stepX)
+      for (let c = colFrom; c <= colTo; c++) {
+        drawCell(cx0 + offX + c * stepX, cy0 + r * stepY)
+      }
+    }
+  }
+  ctx.restore()
+}
+
 function drawNoteIcon(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, color: string): void {
   ctx.fillStyle = color
   ctx.beginPath()
@@ -254,6 +293,9 @@ export function drawObjects(ctx: CanvasRenderingContext2D, objects: PageObject[]
         }
         break
       }
+      case 'watermark':
+        drawWatermark(ctx, o, W, H)
+        break
       case 'note':
         if (mode === 'editor') drawNoteIcon(ctx, o.x * W, o.y * H, 0.028 * W, o.color)
         break

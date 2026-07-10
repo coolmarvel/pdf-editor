@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import Box from '@mui/material/Box'
+import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import Select from '@mui/material/Select'
 import MenuItem from '@mui/material/MenuItem'
@@ -30,9 +31,17 @@ import LineWeightRounded from '@mui/icons-material/LineWeightRounded'
 import LineStyleRounded from '@mui/icons-material/LineStyleRounded'
 import LayersRounded from '@mui/icons-material/LayersRounded'
 import TextFieldsRounded from '@mui/icons-material/TextFieldsRounded'
+import BrandingWatermarkOutlined from '@mui/icons-material/BrandingWatermarkOutlined'
+import ImageOutlined from '@mui/icons-material/ImageOutlined'
+import RotateRightRounded from '@mui/icons-material/RotateRightRounded'
+import AspectRatioRounded from '@mui/icons-material/AspectRatioRounded'
+import GridOnRounded from '@mui/icons-material/GridOnRounded'
+import AutoStoriesOutlined from '@mui/icons-material/AutoStoriesOutlined'
 import { useEditor, type TextStyle } from '@renderer/store/editor'
-import type { PageObject, TextObj, EditTextObj, ShapeObj, NoteObj, StrokeObj, DashStyle, BlendMode } from '@core/objects'
+import type { PageObject, TextObj, EditTextObj, ShapeObj, NoteObj, StrokeObj, WatermarkObj, DashStyle, BlendMode } from '@core/objects'
 import { FONT_STACKS, measureTextWidthPx } from '@renderer/editor/draw'
+import { renderWatermarkText } from '@renderer/editor/watermark'
+import { fileToDataUrl } from '@renderer/editor/stamp'
 import { useT, type I18nKey } from '@renderer/i18n'
 import { ui } from '@renderer/theme'
 
@@ -400,6 +409,154 @@ function TextControls({ v, patch }: { v: TextControlValues; patch: (p: Partial<T
 
 const NOTE_COLORS = ['#facc15', '#fb923c', '#ef4444', '#ec4899', '#3b82f6', '#22c55e']
 
+const WM_ANGLES = [-90, -45, -30, 0, 30, 45, 90]
+const WM_SIZES = [25, 35, 50, 70, 90] // 페이지 폭 %
+
+/** 기울기 셀렉트 — 도구 설정과 선택된 워터마크 객체가 공유 */
+function AngleSelect({ value, onChange }: { value: number; onChange: (a: number) => void }): JSX.Element {
+  const t = useT()
+  return (
+    <Group icon={<RotateRightRounded />} tooltip={t('wmAngle')}>
+      <Select size="small" value={value} onChange={(e) => onChange(Number(e.target.value))} sx={{ ...selectSx, minWidth: 84 }}>
+        {[...new Set([...WM_ANGLES, value])].sort((a, b) => a - b).map((a) => (
+          <MenuItem key={a} value={a}>
+            {a}°
+          </MenuItem>
+        ))}
+      </Select>
+    </Group>
+  )
+}
+
+/** 배치 셀렉트 (단일/바둑판) — 도구 설정과 선택된 워터마크 객체가 공유 */
+function LayoutSelect({ value, onChange }: { value: 'single' | 'tile'; onChange: (l: 'single' | 'tile') => void }): JSX.Element {
+  const t = useT()
+  return (
+    <Group icon={<GridOnRounded />} tooltip={t('wmLayout')}>
+      <Select size="small" value={value} onChange={(e) => onChange(e.target.value as 'single' | 'tile')} sx={{ ...selectSx, minWidth: 96 }}>
+        <MenuItem value="single">{t('wmSingle')}</MenuItem>
+        <MenuItem value="tile">{t('wmTile')}</MenuItem>
+      </Select>
+    </Group>
+  )
+}
+
+/** 워터마크 도구 컨텍스트 바: 소스(텍스트/이미지)·스타일·배치·범위 설정 후 [적용] */
+function WatermarkToolControls(): JSX.Element {
+  const t = useT()
+  const ws = useEditor((s) => s.watermarkStyle)
+  const setWs = useEditor((s) => s.setWatermarkStyle)
+  const applyWatermark = useEditor((s) => s.applyWatermark)
+  const removeAllWatermarks = useEditor((s) => s.removeAllWatermarks)
+  const hasWatermarks = useEditor((s) => Object.values(s.objectsByPage).some((l) => l.some((o) => o.type === 'watermark')))
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const canApply = ws.mode === 'text' ? !!ws.text.trim() : !!ws.image
+
+  function apply(): void {
+    if (ws.mode === 'text' && ws.text.trim()) {
+      const r = renderWatermarkText(ws.text.trim(), ws.font, ws.color)
+      applyWatermark(r.dataUrl, r.aspect)
+    } else if (ws.mode === 'image' && ws.image) {
+      applyWatermark(ws.image.dataUrl, ws.image.aspect)
+    }
+  }
+
+  return (
+    <>
+      <Group icon={<BrandingWatermarkOutlined />} tooltip={t('watermark')}>
+        <Select size="small" value={ws.mode} onChange={(e) => setWs({ mode: e.target.value as 'text' | 'image' })} sx={{ ...selectSx, minWidth: 96 }}>
+          <MenuItem value="text">{t('wmText')}</MenuItem>
+          <MenuItem value="image">{t('wmImage')}</MenuItem>
+        </Select>
+      </Group>
+      <GDivider />
+      {ws.mode === 'text' ? (
+        <>
+          <Group icon={<TextFieldsRounded />}>
+            <Box
+              component="input"
+              value={ws.text}
+              placeholder={t('wmTextPlaceholder')}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setWs({ text: e.target.value })}
+              sx={{
+                height: CTL_H,
+                width: 168,
+                px: 1.2,
+                border: `1px solid ${ui.gray[300]}`,
+                borderRadius: 2,
+                bgcolor: '#fff',
+                fontSize: 14.5,
+                outline: 'none',
+                boxShadow: ui.shadow.xs,
+                '&:focus': { borderColor: '#3b82f6' },
+                '&::placeholder': { color: ui.gray[400] }
+              }}
+            />
+            <Select
+              size="small"
+              value={ws.font}
+              onChange={(e) => setWs({ font: e.target.value })}
+              sx={{ ...selectSx, minWidth: 112, '& .MuiSelect-select': { py: 0.5, fontFamily: FONT_STACKS[ws.font] } }}
+              MenuProps={{ PaperProps: { sx: { maxHeight: 360 } } }}
+            >
+              {Object.entries(FONT_STACKS).map(([name, stack]) => (
+                <MenuItem key={name} value={name} sx={{ fontFamily: stack }}>
+                  {name}
+                </MenuItem>
+              ))}
+            </Select>
+          </Group>
+          <PaletteControl icon={<FormatColorTextRounded />} title={t('textColor')} value={ws.color} onChange={(c) => setWs({ color: c ?? '#9ca3af' })} />
+        </>
+      ) : (
+        <Group icon={<ImageOutlined />} tooltip={t('wmImage')}>
+          {ws.image && <Box component="img" src={ws.image.dataUrl} sx={{ height: CTL_H - 6, maxWidth: 72, objectFit: 'contain', border: `1px solid ${ui.gray[300]}`, borderRadius: 1, bgcolor: '#fff' }} />}
+          <Button variant="outlined" size="small" onClick={() => fileRef.current?.click()} sx={{ height: CTL_H, textTransform: 'none', whiteSpace: 'nowrap' }}>
+            {t('wmChooseImage')}
+          </Button>
+          <input
+            ref={fileRef}
+            type="file"
+            hidden
+            accept="image/*"
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              if (f) void fileToDataUrl(f).then((image) => setWs({ image }))
+            }}
+          />
+        </Group>
+      )}
+      <GDivider />
+      <OpacityControl value={ws.opacity} onChange={(opacity) => setWs({ opacity })} />
+      <AngleSelect value={ws.angle} onChange={(angle) => setWs({ angle })} />
+      <Group icon={<AspectRatioRounded />} tooltip={t('wmSize')}>
+        <Select size="small" value={Math.round(ws.scale * 100)} onChange={(e) => setWs({ scale: Number(e.target.value) / 100 })} sx={{ ...selectSx, minWidth: 78 }}>
+          {[...new Set([...WM_SIZES, Math.round(ws.scale * 100)])].sort((a, b) => a - b).map((p) => (
+            <MenuItem key={p} value={p}>
+              {p}%
+            </MenuItem>
+          ))}
+        </Select>
+      </Group>
+      <LayoutSelect value={ws.layout} onChange={(layout) => setWs({ layout })} />
+      <Group icon={<AutoStoriesOutlined />} tooltip={t('wmScope')}>
+        <Select size="small" value={ws.scope} onChange={(e) => setWs({ scope: e.target.value as 'all' | 'current' })} sx={{ ...selectSx, minWidth: 118 }}>
+          <MenuItem value="all">{t('wmAllPages')}</MenuItem>
+          <MenuItem value="current">{t('wmCurrentPage')}</MenuItem>
+        </Select>
+      </Group>
+      <GDivider />
+      <Button variant="contained" size="small" disabled={!canApply} onClick={apply} sx={{ height: CTL_H, px: 2, textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap' }}>
+        {t('wmApply')}
+      </Button>
+      <Button variant="text" size="small" color="inherit" disabled={!hasWatermarks} onClick={removeAllWatermarks} sx={{ height: CTL_H, textTransform: 'none', whiteSpace: 'nowrap', color: ui.gray[600] }}>
+        {t('wmRemoveAll')}
+      </Button>
+    </>
+  )
+}
+
 export default function SubToolbar(): JSX.Element | null {
   const t = useT()
   const tool = useEditor((s) => s.tool)
@@ -416,6 +573,8 @@ export default function SubToolbar(): JSX.Element | null {
   const setEraserStyle = useEditor((s) => s.setEraserStyle)
   const shapeStyle = useEditor((s) => s.shapeStyle)
   const setShapeStyle = useEditor((s) => s.setShapeStyle)
+  const markStyle = useEditor((s) => s.markStyle)
+  const setMarkStyle = useEditor((s) => s.setMarkStyle)
   const updateObject = useEditor((s) => s.updateObject)
   const removeObject = useEditor((s) => s.removeObject)
 
@@ -546,6 +705,18 @@ export default function SubToolbar(): JSX.Element | null {
         </>
       )
     }
+    if (selObj.type === 'watermark') {
+      const wm = selObj as WatermarkObj
+      const patch = (p: Partial<WatermarkObj>): void => updateObject(selected.pageId, selected.objectId, p as Partial<PageObject>)
+      return bar(
+        <>
+          <OpacityControl value={wm.opacity} onChange={(opacity) => patch({ opacity })} />
+          <GDivider />
+          <AngleSelect value={wm.angle} onChange={(angle) => patch({ angle })} />
+          <LayoutSelect value={wm.layout} onChange={(layout) => patch({ layout })} />
+        </>
+      )
+    }
     if (selObj.type === 'image' || selObj.type === 'link') {
       const patch = (p: Partial<PageObject>): void => updateObject(selected.pageId, selected.objectId, p)
       return bar(<OpacityControl value={selObj.opacity} onChange={(opacity) => patch({ opacity })} />)
@@ -601,20 +772,38 @@ export default function SubToolbar(): JSX.Element | null {
       return bar(hint('hintEraseDrawing'))
     case 'rect':
     case 'ellipse':
-    case 'cross':
-    case 'check':
       return bar(
         <>
           <PaletteControl icon={<BorderColorRounded />} title={t('strokeColor')} value={shapeStyle.stroke} onChange={(c) => setShapeStyle({ stroke: c ?? '#2563eb' })} />
-          {(tool === 'rect' || tool === 'ellipse') && (
-            <PaletteControl icon={<FormatColorFillRounded />} title={t('fillColor')} value={shapeStyle.fill} onChange={(fill) => setShapeStyle({ fill })} allowNone />
-          )}
+          <PaletteControl icon={<FormatColorFillRounded />} title={t('fillColor')} value={shapeStyle.fill} onChange={(fill) => setShapeStyle({ fill })} allowNone />
           <GDivider />
           <WidthSelect value={shapeStyle.strokeWidth} onChange={(strokeWidth) => setShapeStyle({ strokeWidth })} />
           <GDivider />
           <DashSelect value={shapeStyle.dash} onChange={(dash) => setShapeStyle({ dash })} />
         </>
       )
+    case 'cross':
+    case 'check':
+      // X/체크: 찍기 전에 색·크기를 정한다 — 커서가 이 크기 그대로 보이고 그대로 찍힌다
+      return bar(
+        <>
+          <PaletteControl icon={<BorderColorRounded />} title={t('strokeColor')} value={markStyle.color} onChange={(c) => setMarkStyle({ color: c ?? '#111111' })} />
+          <GDivider />
+          <Group icon={<AspectRatioRounded />} tooltip={t('wmSize')}>
+            <Select size="small" value={widthToPt(markStyle.size)} onChange={(e) => setMarkStyle({ size: ptToWidth(Number(e.target.value)) })} sx={{ ...selectSx, minWidth: 78 }}>
+              {[...new Set([12, 16, 20, 24, 32, 40, 56, widthToPt(markStyle.size)])].sort((a, b) => a - b).map((p) => (
+                <MenuItem key={p} value={p}>
+                  {p} pt
+                </MenuItem>
+              ))}
+            </Select>
+          </Group>
+          <GDivider />
+          <WidthSelect value={shapeStyle.strokeWidth} onChange={(strokeWidth) => setShapeStyle({ strokeWidth })} />
+        </>
+      )
+    case 'watermark':
+      return bar(<WatermarkToolControls />)
     case 'note':
       return bar(hint('hintNote'))
     case 'link':

@@ -1,7 +1,7 @@
 ---
 title: 문서 작성 가이드
 created: 2026-07-07
-updated: 2026-07-07
+updated: 2026-07-10
 domain: development
 ---
 
@@ -13,10 +13,11 @@ domain: development
 이 프로젝트의 문서는 **사람과 AI 에이전트(Claude Code)가 동시에 사용**한다는 전제로 쓴다.
 받는 사람(또는 AI)의 사전 지식을 가정하지 말고, 누가 받아도 바로 작업 가능한 형태를 목표로 한다.
 
-## ⚠️ 이 프로젝트의 결정적 차이: git 저장소가 아니다
+## ⚠️ 이 프로젝트의 결정적 차이: git history 를 이력 SSOT 로 삼지 않는다
 
 `cm_groupware`는 완료된 작업 이력을 **git history**에 맡기고 `todo.md`엔 미해결만 남긴다.
-**pdf-editor는 git 저장소가 아니다.** 따라서 그 "완료 이력" 역할을 `docs/session-log.md`가 대신한다.
+pdf-editor 는 2026-07-08부터 git 에 올리지만 **커밋/푸시는 사용자가 직접·성긴 단위**(Claude 는 요청 시
+커밋 메시지만 작성)라, 그 "완료 이력" 역할은 `docs/session-log.md`가 맡는다.
 
 - **"무슨 일이 언제 있었나"의 SSOT = `docs/session-log.md`** (git log 대용).
 - `todo.md`는 그들과 동일하게 **미해결·향후 작업만** 담는다.

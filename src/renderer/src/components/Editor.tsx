@@ -54,6 +54,10 @@ export default function Editor(): JSX.Element {
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && !inEditable && s.selected) {
         e.preventDefault()
         s.removeObject(s.selected.pageId, s.selected.objectId)
+      } else if (e.key === 'Escape' && !inEditable) {
+        // 활성 도구 비활성화 (2026-07-10 피드백). editText 세션은 setTool 이 저장 확인을 처리
+        if (s.tool !== 'select') s.setTool('select')
+        else if (s.selected) s.setSelected(null)
       }
     }
     window.addEventListener('keydown', onKey)

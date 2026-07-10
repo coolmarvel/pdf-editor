@@ -1,13 +1,123 @@
 ---
 title: 세션 로그
 created: 2026-07-08
-updated: 2026-07-09
+updated: 2026-07-10
 domain: development
 ---
 
 # 세션 로그 (최신이 위)
 
-git 저장소가 아니므로 이 파일이 **"언제 무슨 일이 있었나"의 SSOT**다. 세션마다 최상단에 블록 추가.
+이 파일이 **"언제 무슨 일이 있었나"의 SSOT**다. 세션마다 최상단에 블록 추가.
+(2026-07-08부터 git 에 올리지만 커밋/푸시는 사용자가 직접·성긴 단위 — git history 를 이력 SSOT 로 삼지 않는다.)
+
+## 2026-07-10 — v1.5.2: X/체크 사전 크기 조절·검정 기본 + 워터마크 커서 + ESC 도구 해제
+
+**피드백** (구두, v1.5.1 확인 후): ① X/체크가 커서 미리보기보다 크게 찍힘 — 찍기 전에 컨텍스트 바에서
+크기 조절 가능해야 ② 기본 색은 검정 ③ 워터마크 도구의 + 커서 불필요 ④ ESC 로 활성 도구 해제.
+
+**수정**:
+- `store/editor.ts`: `MarkStyle { color, size }` 신설 (기본 검정·16pt). shapeStyle(사각형/원)과 분리 —
+  기본색을 나누기 위함 (도형은 파랑 유지).
+- `SubToolbar.tsx`: cross/check 케이스를 rect/ellipse 에서 분리 — 색 팔레트(markStyle)+크기(12~56pt)+굵기.
+  (기존에 보이던 DashSelect 는 제거 — 배치 객체에 dash 를 안 넣고 있어 무의미했음)
+- `PageCanvas.tsx`: 배치 크기 = `markStyle.size` (0.035 고정 제거), stroke = markStyle.color.
+  커서 SVG 를 **화면상 배치 크기와 1:1** 로 동적 생성 — markPx = size×페이지px×zoom,
+  viewBox 점유율(MARK_VISUAL_RATIO 0.75) 보정, 16~64px 클램프, 핫스팟 중앙.
+  워터마크 도구 커서 'default' (crosshair 폴백 제외).
+- `Editor.tsx` 키 핸들러: ESC → tool!=='select' 면 select 로, 아니면 선택 해제.
+  (입력 중(TEXTAREA/INPUT)엔 무시. editText 세션은 setTool 이 저장 확인 처리)
+
+**검증**: typecheck ✅, test 21/21 ✅, build ✅. E2E(scratchpad/mark-check.cjs):
+커서 svg=검정·36px(마크 27px) vs 16pt 배치 실측 32px(라운드 캡 오버플로 포함, 커서 시각 크기와 1px 이내) ✅ /
+크기 셀렉트 32pt 로 크게 찍힘 ✅ / ESC→커서 default ✅ / 워터마크 커서 default ✅ / 연필 ESC ✅.
+
+## 2026-07-10 — v1.5.1: 서명 다이얼로그 라이트 스킨(흰/빨강) + 축소
+
+**피드백**: 사용자 캡처 1장(`pdf-editor-screenshots/`) — 서명 다이얼로그가 검은 배경(Guru 다크모드 색
+그대로)이라 우리 흰색·빨강 UI와 안 맞고, 모달이 너무 큼.
+
+**수정** (`SignDialog.tsx` — 로직 변경 없음, 스타일만):
+- 다크 팔레트(DIALOG_DARK/PANEL_DARK) 제거 → `theme.ts` `ui` 팔레트로 전환:
+  흰 배경, gray 스케일 테두리/텍스트, 포인트 = `ui.brand[500]`(#e0343f).
+  탭 인디케이터/선택, 체크박스, Done·서명 추가 버튼, 서체 선택 테두리, 잉크 스와치 링 전부 레드.
+- 크기 축소: 폭 min(1120→**720px**), add 화면 minHeight 720→480, library 640→400,
+  탭 높이 72→46, 서체 그리드 104→60(테두리 카드형), 이미지 영역 360→240, 패딩 일괄 축소.
+- 삭제 버튼(카드 우상단): 어두운 사각 → 흰 배경+회색 테두리, hover 시 브랜드 레드.
+
+**검증**: typecheck ✅, test 21/21 ✅, build ✅. sign E2E 7항목 재통과 ✅ (동작 무변).
+그리기/이미지/타이핑/라이브러리 4화면 스크린샷으로 라이트 스킨·축소 확인 ✅.
+
+**피드백 정리**: 캡처 → `docs/feedback-archive/2026-07-10-v1.5.1-sign-light-skin/`.
+
+## 2026-07-10 — v1.5.0: 워터마크 도구 신설 (MINOR — 서명 확정 후 착수)
+
+**요청**: 워터마크 진행. plans 작성, 툴바 + 컨텍스트 바(우리 UI/UX 문법), 텍스트/이미지 양쪽 지원,
+다양한 옵션. Guru 참고 스크린샷 없음 → 자체 설계 (`docs/plans/2026-07-10-watermark.md`).
+
+**구현** (새 도구 추가 체크리스트 ①~⑤ 전체):
+- `core/objects.ts`: `WatermarkObj` — rect(중앙 셀)+사전 렌더 비트맵 dataUrl+angle+layout(single/tile).
+  텍스트도 비트맵으로 사전 렌더(스탬프/서명 방식) → draw/save 가 이미지 경로 재사용.
+  `rotateObjectCW`(angle+90 누적)·`hitTest`(중앙 셀만 — 전체 페이지를 잡으면 다른 객체 클릭을 삼킴).
+- `editor/watermark.ts`: `renderWatermarkText` (bold 64px×3, fontCss 재사용).
+- `editor/draw.ts`: `drawWatermark` — single 은 rect 중심 회전 1개, tile 은 엇갈린 벽돌 패턴을
+  회전 여백(pad)까지 포함해 페이지 전체 반복. 중앙 셀 위치를 격자 기준으로 삼아 히트테스트와 일치.
+- `store/editor.ts`: Tool `'watermark'`, `watermarkStyle`(mode/text/font/color/image/opacity/angle/scale/layout/scope),
+  `applyWatermark`(범위 페이지에 **한 커밋**으로 추가 → Ctrl+Z 한 번에 전체 취소), `removeAllWatermarks`.
+- `PageCanvas.tsx`: preload·selRect·hasHandles·moveObject 에 watermark 추가 (rect 기반 경로 재사용 —
+  이동/8핸들 리사이즈가 그대로 동작). `pdf/save.ts`: preload 필터에 watermark 추가 (굽기는 drawObjects 공유라 자동).
+- `Toolbar.tsx`: 서명 옆 `워터마크` 토글 버튼. `SubToolbar.tsx`: 도구 바(소스 셀렉트·문구 입력·폰트·색·
+  불투명도·기울기·크기%·배치·범위·[적용]·[모두 제거]) + 선택된 워터마크 바(불투명도·기울기·배치).
+- i18n ko/en `wm*` 키 추가. 기본값: 회색 #9ca3af·35%·-30°·폭 50%·단일·전체 페이지.
+
+**검증**: typecheck ✅, test 21/21 ✅, build ✅. Playwright E2E(scratchpad/wm-check.cjs):
+컨텍스트 바 노출 ✅ / 적용 시 두 페이지 모두 잉크 픽셀 확인 ✅ / **언두 1번에 전체 제거** ✅ /
+바둑판 잉크 15배(반복 패턴) ✅ / 중앙 셀 클릭 선택(스크롤 후) ✅ / Delete 는 그 페이지만 ✅ / 모두 제거 ✅.
+스크린샷으로 컨텍스트 바가 기존 Group/36px 문법과 일치함 확인.
+
+**참고**: 사이드바 썸네일은 원래 편집 객체를 렌더하지 않음(전 도구 공통) — 워터마크도 본문에만 보임.
+
+## 2026-07-10 — 서명 기능 사용자 확정 + 문서 일제 정리 (코드 변경 없음, v1.4.9 유지)
+
+**확정**: 사용자가 v1.4.9 서명 동작 확인("된 거 같아") — **서명 기능 종결 선언**.
+다음 기능 = **워터마크**, 착수 시 **v1.5.0** (MINOR 승격 선언 접수, 지금은 버전 안 올림 — 사용자 지시).
+
+**플랫폼 상태**: Windows exe 1.4.9 배포 완료. macOS(arm64)는 코드 동일하나 **1.4.9 DMG 는 미생성**
+(WSL 에 `hdiutil` 없음) — 맥에서 `npm run dist:mac` 필요 (todo P1).
+
+**문서 정리** (코드-문서 대조 후 어긋난 곳 일괄 현행화):
+- `guides/editor.md`: sign 을 image/stamp 클릭 배치에서 분리, "서명(Sign) 흐름 (v1.4.9)" 절 신설,
+  낡은 제약("savedSigns 재시작 시 소실") 삭제.
+- `plans/2026-07-08-pdfguru-parity.md`: 상태표를 v1.4.9 기준으로 — Sign ✅ 사용자 확정,
+  Page layout ✅(v1.4.0 에 Mode/Transition 구현됐는데 표가 "회전만"으로 낡아 있었음), 워터마크 = 다음 기능.
+- `todo.md`: 완료 항목 제거(설치 테스트·서명 영속화), **stale 항목 청소** — "Page layout 모드/전환"(P2)과
+  "다국어 UI"(P4)는 v1.4.0 에서 이미 구현·배선 확인(Toolbar `setPageMode`/`setPageTransition`,
+  Landing `setLang`, i18n ko/en). 워터마크를 P1 최상단으로 승격.
+
+## 2026-07-10 — v1.4.9: 서명 Done 즉시 배치 + 저장 서명 영속화
+
+**피드백**: 사용자가 `pdf-guru-screenshots/` 에 Guru Sign 플로우 캡처 8장 업로드. ① Done(완료)을 누르면
+클릭 대기 없이 **바로 화면에 서명이 나타나야** 하고 ② 서명이 하나라도 저장돼 있으면 Draw/Image/Type 이
+아니라 **저장 서명 목록(삭제 가능)** 이 먼저 보여야 하는데 그렇지 않다고 함.
+
+**원인**:
+- Done 이 `pendingImage` + `sign` 도구 전환으로 "페이지 클릭 대기" 상태만 만들었음 (Guru 는 즉시 배치).
+- `savedSigns` 가 zustand 메모리에만 있어 **앱을 재시작하면 소실** → 항상 추가 화면부터 나옴
+  (v1.4.8 의 라이브러리 화면 자체는 있었으나 영속화가 없어 재실행 시 무용지물).
+
+**수정**:
+- `store/editor.ts`: `placeSignOnCurrentPage(dataUrl, aspect, at?)` 추가 — 현재 페이지에
+  PageCanvas 클릭 배치와 같은 크기(wN 0.28)로 즉시 추가 + 선택 상태로 전환(히스토리 1단계).
+  중심 좌표는 페이지 밖으로 안 나가게 클램프.
+- `savedSigns` localStorage 영속화 (`loadSavedSigns`/`persistSavedSigns`, 키 `savedSigns`).
+- `SignDialog.tsx`: Done/저장 카드 클릭 → `visiblePageCenter()` 로 **화면에 실제 보이는 페이지
+  영역의 중앙**을 계산해 그 자리에 즉시 배치 (문서 좌표 0.5 고정이면 폭맞춤 화면에선 스크롤 밖에
+  떨어지는 문제를 E2E 픽셀 검증에서 발견해 수정). `setPendingImage`/`setTool('sign')` 경로 제거.
+
+**검증**: typecheck ✅, test 21/21 ✅, build ✅. 전용 Playwright E2E(scratchpad/sign-check.cjs)로
+그리기→Done 즉시 배치(뷰포트 안) ✅ / 재오픈 시 라이브러리+삭제 버튼 ✅ / 카드 클릭 즉시 배치 ✅ /
+**앱 재시작 후에도 라이브러리 유지(영속화)** ✅ / 삭제 시 localStorage 반영 ✅.
+
+**피드백 정리**: 캡처 8장 → `docs/feedback-archive/2026-07-10-v1.4.9-sign-immediate/`.
 
 ## 2026-07-09 — v1.4.8: Sign 다이얼로그 Guru 화면 구조 반영
 

@@ -124,6 +124,20 @@ export interface ImageObj extends BaseObj {
   dataUrl: string
 }
 
+/**
+ * 워터마크 — 텍스트도 비트맵으로 사전 렌더해 얹는다 (스탬프/서명과 동일 접근).
+ * rect = 중앙 마크 1개의 상자. tile 배치는 이 상자를 기준 셀로 페이지 전체에 반복.
+ * 선택/이동/리사이즈 히트테스트도 rect(중앙 셀) 기준.
+ */
+export interface WatermarkObj extends BaseObj {
+  type: 'watermark'
+  rect: Rect
+  dataUrl: string
+  /** 시계방향 회전(도) */
+  angle: number
+  layout: 'single' | 'tile'
+}
+
 /** 스티키 노트 (PDF Text 주석으로 내보냄) */
 export interface NoteObj extends BaseObj {
   type: 'note'
@@ -140,7 +154,7 @@ export interface LinkObj extends BaseObj {
   target: { kind: 'url'; url: string } | { kind: 'page'; page: number }
 }
 
-export type PageObject = TextObj | EditTextObj | StrokeObj | ShapeObj | ImageObj | NoteObj | LinkObj
+export type PageObject = TextObj | EditTextObj | StrokeObj | ShapeObj | ImageObj | WatermarkObj | NoteObj | LinkObj
 
 let seq = 0
 export function newId(): ObjectId {
@@ -176,6 +190,9 @@ export function rotateObjectCW(o: PageObject): PageObject {
       return { ...o, rect: rotateRectCW(o.rect) }
     case 'image':
       return { ...o, rect: rotateRectCW(o.rect) }
+    case 'watermark':
+      // 비트맵은 rect 기준으로 그려지므로 각도도 함께 90도 누적
+      return { ...o, rect: rotateRectCW(o.rect), angle: (o.angle + 90) % 360 }
     case 'note': {
       const [x, y] = rotatePointCW([o.x, o.y])
       return { ...o, x, y }
@@ -223,6 +240,9 @@ export function hitTest(o: PageObject, x: number, y: number, tol: number, aspect
     case 'shape':
       return inRect(o.rect)
     case 'image':
+      return inRect(o.rect)
+    case 'watermark':
+      // tile 도 중앙 셀만 — 전체 페이지를 잡으면 다른 객체 클릭을 다 삼킨다
       return inRect(o.rect)
     case 'note':
       return inRect({ x: o.x, y: o.y, w: 0.03, h: 0.03 })

@@ -1,7 +1,7 @@
 ---
 title: 편집기 동작 가이드
 created: 2026-07-08
-updated: 2026-07-08
+updated: 2026-07-10
 domain: development
 ---
 
@@ -33,7 +33,9 @@ store/editor.ts: pages(PageRef[]) + objectsByPage + displaySizes + history
 | eraseDrawing | 클릭/문지르기 → 스트로크 삭제 | — |
 | rect/ellipse | 드래그 | ShapeObj |
 | cross/check | 클릭(고정 크기) | ShapeObj |
-| image/stamp/sign | (다이얼로그에서 pendingImage 셋) → 클릭 배치 | ImageObj |
+| image/stamp | (다이얼로그에서 pendingImage 셋) → 클릭 배치 | ImageObj |
+| sign | 다이얼로그(SignDialog)에서 Done/저장 카드 클릭 → **클릭 대기 없이** 화면에 보이는 페이지 영역 중앙에 즉시 배치 (`store/editor.ts` `placeSignOnCurrentPage`) | ImageObj(kind:'sign') |
+| watermark | 컨텍스트 바에서 설정(텍스트/이미지·불투명도·기울기·크기·단일/바둑판·전체/현재) → [적용] = 범위 페이지에 한 커밋으로 추가 (`applyWatermark`). 텍스트도 비트맵 사전 렌더(`editor/watermark.ts`). 선택은 중앙 셀 클릭 | WatermarkObj |
 | note | 클릭 → 노트 팝업 | NoteObj |
 | link | 드래그 → 링크 설정 팝오버 | LinkObj |
 | hand | 드래그로 스크롤 (PagesView) | — |
@@ -48,4 +50,12 @@ store/editor.ts: pages(PageRef[]) + objectsByPage + displaySizes + history
 
 - Edit Text 는 pdf.js 텍스트 스팬 단위(줄 조각) — 문단 병합 없음.
 - 저장 시 원본 문서의 기존 링크/북마크는 유지되지 않음 (ADR-0002 트레이드오프).
-- 저장된 서명(savedSigns)은 앱 재시작 시 사라짐.
+
+## 서명(Sign) 흐름 (v1.4.9)
+
+- 저장 서명이 없으면 SignDialog 는 Draw/Image/Type **추가 화면**, 하나라도 있으면 **라이브러리 화면**
+  (2열 카드 + 카드별 삭제 버튼 + Add signature)부터 표시.
+- 저장 서명은 localStorage 키 `savedSigns` 로 영속화 — 앱 재시작에도 유지
+  (`store/editor.ts` `loadSavedSigns`/`persistSavedSigns`).
+- Done/카드 클릭 = 즉시 배치. 배치 좌표는 `SignDialog.tsx` `visiblePageCenter()` 가 현재 페이지의
+  뷰포트 교차 영역 중심을 계산해 전달 (문서 좌표 0.5 고정이면 폭맞춤 화면에서 스크롤 밖에 떨어짐 — v1.4.9 사고).
