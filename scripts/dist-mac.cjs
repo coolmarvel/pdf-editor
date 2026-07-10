@@ -5,7 +5,21 @@ const { spawnSync } = require('child_process')
 const root = path.join(__dirname, '..')
 const releaseDir = path.join(root, 'release')
 const pkg = require(path.join(root, 'package.json'))
-const arch = process.arch === 'arm64' ? 'arm64' : 'x64'
+
+function normalizeArch(value) {
+  if (!value) return null
+  const raw = String(value).replace(/^--?/, '').replace(/^arch=/, '').toLowerCase()
+  if (raw === 'arm64' || raw === 'aarch64' || raw === 'apple-silicon') return 'arm64'
+  if (raw === 'x64' || raw === 'x86_64' || raw === 'amd64' || raw === 'intel') return 'x64'
+  throw new Error(`Unsupported macOS arch: ${value}. Use --arm64 or --x64.`)
+}
+
+function requestedArch() {
+  const arg = process.argv.slice(2).find((item) => item.startsWith('--arch=') || ['--arm64', '--x64', '--amd64', '--x86_64', '--intel'].includes(item))
+  return normalizeArch(arg) ?? normalizeArch(process.env.MAC_ARCH) ?? (process.arch === 'arm64' ? 'arm64' : 'x64')
+}
+
+const arch = requestedArch()
 const appOutDir = path.join(releaseDir, arch === 'arm64' ? 'mac-arm64' : 'mac')
 const asciiApp = path.join(appOutDir, 'PDFEditor.app')
 const koreanApp = path.join(appOutDir, 'PDF 편집기.app')
@@ -32,6 +46,7 @@ run(process.execPath, [
   path.join(root, 'node_modules', 'electron-builder', 'cli.js'),
   '--mac',
   '--dir',
+  `--${arch}`,
   '-c.productName=PDFEditor',
   '-c.mac.extendInfo.CFBundleDisplayName=PDF 편집기'
 ])

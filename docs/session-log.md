@@ -10,6 +10,33 @@ domain: development
 이 파일이 **"언제 무슨 일이 있었나"의 SSOT**다. 세션마다 최상단에 블록 추가.
 (2026-07-08부터 git 에 올리지만 커밋/푸시는 사용자가 직접·성긴 단위 — git history 를 이력 SSOT 로 삼지 않는다.)
 
+## 2026-07-10 — v1.5.2: macOS DMG arm64/x64 생성 + Intel 옵션 추가
+
+**요청**: 최신 v1.5.2 를 DMG 로 굽되, Intel Mac 용(`x64`/`x86_64`/`amd64`)도 가능한지 확인.
+
+**정리**:
+- Intel Mac 용은 Electron Builder 기준 `x64`이며, 일반적으로 `x86_64`/`amd64`와 같은 계열.
+- `scripts/dist-mac.cjs`에 아키텍처 선택 옵션 추가:
+  `--arm64`, `--x64`, `--amd64`, `--x86_64`, `--intel`, `MAC_ARCH=x64|arm64`.
+- npm 스크립트 추가: `dist:mac:arm64`, `dist:mac:x64`.
+- `docs/guides/packaging.md`에 Apple Silicon/Intel DMG 명령과 산출물 규칙 기록.
+
+**검증/산출물**:
+- typecheck ✅, test 21/21 ✅.
+- `npm run dist:mac:x64` ✅ → `release/PDF편집기-1.5.2-x64.dmg` (163M) 생성, `hdiutil verify` VALID ✅.
+- `npm run dist:mac:arm64` ✅ → `release/PDF편집기-1.5.2-arm64.dmg` (159M) 생성, `hdiutil verify` VALID ✅.
+- 두 파일 모두 바탕화면 복사 완료:
+  `/Users/iseonghyeon/Desktop/PDF편집기-1.5.2-arm64.dmg`,
+  `/Users/iseonghyeon/Desktop/PDF편집기-1.5.2-x64.dmg`.
+
+**추가 정리**: GitHub Release 업로드용 `scripts/upload-release-mac.sh`가 DMG 파일명에서 arm64/x64를
+자동 판별해 `PDF-Editor-<version>-arm64.dmg` / `PDF-Editor-<version>-x64.dmg` 자산명으로 올리도록 수정.
+포트폴리오 다운로드 링크와 맞추기 위한 예시는 `docs/guides/packaging.md`에 기록.
+
+**release 정책 재정정**: 설치 파일 용량이 너무 커 일반 git 커밋 대상으로 부적합하다는 판단으로,
+`release/`는 다시 전체 `.gitignore` 유지. 최신 설치 파일 3개(exe/arm64 dmg/x64 dmg)는 로컬 `release/`와
+바탕화면에 둘 수 있지만 git에는 올리지 않고, 공개 배포가 필요하면 GitHub Release 자산으로 업로드한다.
+
 ## 2026-07-10 — 릴리스 업로드 스크립트 정리 (코드 변경 없음, v1.5.2 유지)
 
 **배경**: 포트폴리오 세션(`~/coolmarvel_portfolio`)이 사이트 다운로드 링크용으로 이 저장소에

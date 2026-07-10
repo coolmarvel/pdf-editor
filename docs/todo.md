@@ -9,9 +9,8 @@ domain: development
 
 ## P1 — 다음 릴리스에서 다뤄야 함
 
-- [ ] **사용자 v1.5.2 설치 테스트** — X/체크 사전 크기 조절·ESC 도구 해제·워터마크 커서 실물 확인
-- [ ] v1.5.2 macOS DMG — WSL 세션에서는 `hdiutil` 이 없어 DMG 를 못 굽는다. 맥에서 `npm run dist:mac` 필요
-      (코드는 동일. Windows exe 는 1.5.2 배포 완료)
+- [ ] **사용자 v1.5.2 설치 테스트** — Windows exe + macOS DMG(`arm64`/`x64`) 설치/실행,
+      X/체크 사전 크기 조절·ESC 도구 해제·워터마크 커서 실물 확인
 - [ ] macOS Developer ID 인증서 발급 후 정식 codesign + notarization 적용
 - [ ] 혼합 모드 저장 결과 실물 검증 — Adobe/크롬 뷰어에서 화면과 동일한지 (백드롭 래스터 조각 방식)
 - [ ] 지우개 도형 종류 확장 검토 (Guru: Line/Arrow/Polygon/Polyline — 현재 사각형/원)

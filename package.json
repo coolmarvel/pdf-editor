@@ -17,6 +17,8 @@
     "pack:win": "npm run build && electron-builder --win --dir",
     "dist:win": "npm run build && electron-builder --win",
     "dist:mac": "npm run build && node scripts/dist-mac.cjs",
+    "dist:mac:arm64": "npm run build && node scripts/dist-mac.cjs --arm64",
+    "dist:mac:x64": "npm run build && node scripts/dist-mac.cjs --x64",
     "dist:linux": "npm run build && electron-builder --linux"
   },
   "dependencies": {
