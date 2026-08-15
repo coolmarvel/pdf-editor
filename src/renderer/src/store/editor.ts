@@ -22,6 +22,7 @@ import { newId, rotateObjectCW } from '@core/objects'
 import type { History } from '@core/history'
 import { emptyHistory, push, undo as hUndo, redo as hRedo } from '@core/history'
 import { registerDoc, getDisplaySize, clearDocs } from '@renderer/pdf/docs'
+import { imageFilesToPdfBytes, A4 } from '@renderer/pdf/imageToPdf'
 
 export type Tool =
   | 'select'
@@ -129,6 +130,8 @@ interface EditorState {
   phase: Phase
   loadingProgress: number
   fileName: string
+  /** 다이얼로그/사이드바처럼 자체 토스트가 없는 화면이 Editor 의 스낵바로 알림을 올리는 통로 */
+  notice: { msg: string; severity: 'success' | 'error' } | null
   pages: PageRef[]
   objectsByPage: Record<string, PageObject[]>
   /** 페이지 id → 표시 크기(pt) */
@@ -174,6 +177,7 @@ interface EditorState {
   closeDocument(): void
   setPhase(p: Phase): void
   setFileName(n: string): void
+  setNotice(n: EditorState['notice']): void
   setTool(t: Tool): void
   setTextStyle(p: Partial<TextStyle>): void
   setPenStyle(p: Partial<HighlightStyle>): void
@@ -234,6 +238,11 @@ interface EditorState {
   pageNudge(ids: Set<string>, dir: -1 | 1): void
   /** PDF 가져오기. index 지정 시 그 위치 앞에 삽입, 없으면 끝에 */
   pageImport(bytes: Uint8Array, index?: number): Promise<void>
+  /**
+   * 이미지(jpg/png/webp/…)를 페이지로 가져오기. 각 이미지가 1페이지가 된다.
+   * 페이지 크기는 삽입 위치 기준 페이지를 따르고(문서 없으면 A4), 이미지는 비율 유지로 fit.
+   */
+  pageImportImages(files: Blob[], index?: number): Promise<void>
 }
 
 const DEFAULT_TEXT: TextStyle = {
@@ -311,6 +320,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     phase: 'landing',
     loadingProgress: 0,
     fileName: '',
+    notice: null,
     pages: [],
     objectsByPage: {},
     displaySizes: {},
@@ -394,6 +404,7 @@ export const useEditor = create<EditorState>()((set, get) => {
 
     setPhase: (phase) => set({ phase }),
     setFileName: (fileName) => set({ fileName }),
+    setNotice: (notice) => set({ notice }),
     setTool(tool) {
       const s = get()
       // 텍스트 수정 세션 종료 시도: 변경 있으면 저장/안 함 확인 (Editor 다이얼로그), 없으면 조용히 종료
@@ -689,6 +700,17 @@ export const useEditor = create<EditorState>()((set, get) => {
         displaySizes[p.id] = await getDisplaySize(p)
       }
       commit({ pages, displaySizes })
+    },
+
+    async pageImportImages(files, index) {
+      if (files.length === 0) return
+      const s = get()
+      const at = index ?? s.pages.length
+      // 삽입 위치 바로 앞 페이지의 크기를 따라간다 (맨 앞이면 첫 페이지) — 레이아웃이 튀지 않게
+      const ref = s.pages[Math.max(0, at - 1)] ?? s.pages[0]
+      const size = ref ? s.displaySizes[ref.id] : undefined
+      const bytes = await imageFilesToPdfBytes(files, size ? { pageW: size.w, pageH: size.h } : A4)
+      await get().pageImport(bytes, at)
     }
   }
 })

@@ -122,7 +122,7 @@ export default function Landing(): JSX.Element {
             size="large"
             startIcon={<UploadFileRounded />}
             onClick={openFile}
-            sx={{ bgcolor: '#fff', color: 'primary.main', px: 4, py: 1.4, fontSize: 16, '&:hover': { bgcolor: '#fbeaea' } }}
+            sx={{ bgcolor: '#fff', color: 'primary.main', px: 4, py: 1.4, fontSize: 16, '&:hover': { bgcolor: '#e6f2ea' } }}
           >
             {t('choosePdf')}
           </Button>

@@ -36,7 +36,7 @@ export default function FloatingPager(): JSX.Element {
         right: 0,
         mx: 'auto',
         width: 'fit-content',
-        bgcolor: 'rgba(29,41,57,.95)' /* gray-800 */,
+        bgcolor: 'rgba(19,44,31,.95)' /* 딥 그린-슬레이트 (pdfguru의 중성 다크 필과 구분) */,
         borderRadius: 99,
         px: 2.5,
         py: 0.6,
@@ -48,7 +48,7 @@ export default function FloatingPager(): JSX.Element {
         zIndex: 20
       }}
     >
-      <Typography sx={{ color: '#cfd6e4', mr: 1, fontSize: 15, whiteSpace: 'nowrap', flexShrink: 0 }}>{t('pageLabel')}</Typography>
+      <Typography sx={{ color: '#cfe0d5', mr: 1, fontSize: 15, whiteSpace: 'nowrap', flexShrink: 0 }}>{t('pageLabel')}</Typography>
       <IconButton size="small" sx={iconSx} disabled={currentPage <= 0} onClick={() => requestScrollTo(Math.max(0, currentPage - step))}>
         <KeyboardArrowUpRounded />
       </IconButton>

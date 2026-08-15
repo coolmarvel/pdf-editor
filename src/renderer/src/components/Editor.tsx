@@ -38,6 +38,13 @@ export default function Editor(): JSX.Element {
   const [busy, setBusy] = useState(false)
   const [toast, setToast] = useState<{ msg: string; severity: 'success' | 'error'; path?: string } | null>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
+  // 다이얼로그/사이드바가 올린 알림을 이 화면의 스낵바로 흘려보낸다
+  const notice = useEditor((s) => s.notice)
+  useEffect(() => {
+    if (!notice) return
+    setToast(notice)
+    useEditor.getState().setNotice(null)
+  }, [notice])
 
   // 키보드: Ctrl+Z/Y, Delete
   useEffect(() => {

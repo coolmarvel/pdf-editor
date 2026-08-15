@@ -22,6 +22,9 @@ import SelectAllRounded from '@mui/icons-material/SelectAllRounded'
 import DeselectRounded from '@mui/icons-material/DeselectRounded'
 import { useEditor } from '@renderer/store/editor'
 import { useT } from '@renderer/i18n'
+import { ui } from '@renderer/theme'
+import { IMAGE_ACCEPT } from '@renderer/pdf/imageToPdf'
+import { IconImage } from './icons'
 import ThumbCanvas from './ThumbCanvas'
 
 /** pdfguru의 Manage Pages 모달: 썸네일 그리드 + 일괄 작업 + 드래그 순서 변경 */
@@ -35,6 +38,8 @@ export default function ManagePagesDialog({ open, onClose }: { open: boolean; on
   const pageRotate = useEditor((s) => s.pageRotate)
   const pageNudge = useEditor((s) => s.pageNudge)
   const pageImport = useEditor((s) => s.pageImport)
+  const pageImportImages = useEditor((s) => s.pageImportImages)
+  const setNotice = useEditor((s) => s.setNotice)
   const pageMoveToIndex = useEditor((s) => s.pageMoveToIndex)
   const undo = useEditor((s) => s.undo)
   const redo = useEditor((s) => s.redo)
@@ -46,6 +51,7 @@ export default function ManagePagesDialog({ open, onClose }: { open: boolean; on
   const [dropIdx, setDropIdx] = useState<number | null>(null)
   const dragRef = useRef<{ index: number; startX: number; startY: number; active: boolean; drop: number | null } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const imageRef = useRef<HTMLInputElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
   const has = sel.size > 0
 
@@ -67,6 +73,19 @@ export default function ManagePagesDialog({ open, onClose }: { open: boolean; on
     if (!file) return
     const bytes = new Uint8Array(await file.arrayBuffer())
     await pageImport(bytes)
+  }
+
+  /** 이미지 여러 장 → 각각 1페이지로 문서 끝에 추가 (한 번의 undo 단위) */
+  async function onImportImages(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
+    const files = Array.from(e.target.files ?? [])
+    e.target.value = ''
+    if (files.length === 0) return
+    try {
+      await pageImportImages(files)
+      setNotice({ msg: t('imagePagesAdded'), severity: 'success' })
+    } catch {
+      setNotice({ msg: t('imageImportFailed'), severity: 'error' })
+    }
   }
 
   /** 그리드에서 포인터 위치 → 삽입점 (행 내 좌/우 절반 기준) */
@@ -129,7 +148,11 @@ export default function ManagePagesDialog({ open, onClose }: { open: boolean; on
         <Button size="small" color="inherit" startIcon={<UploadFileRounded />} onClick={() => fileRef.current?.click()}>
           {t('importDoc')}
         </Button>
+        <Button size="small" color="inherit" startIcon={<IconImage sx={{ fontSize: 19 }} />} onClick={() => imageRef.current?.click()}>
+          {t('importImages')}
+        </Button>
         <input ref={fileRef} type="file" accept="application/pdf" hidden onChange={(e) => void onImportFile(e)} />
+        <input ref={imageRef} type="file" accept={IMAGE_ACCEPT} multiple hidden onChange={(e) => void onImportImages(e)} />
         <Box sx={{ flex: 1 }} />
         <Tooltip title={t('undo')}>
           <span>
@@ -196,7 +219,7 @@ export default function ManagePagesDialog({ open, onClose }: { open: boolean; on
                 userSelect: 'none',
                 touchAction: 'none',
                 opacity: dragIdx === i ? 0.4 : 1,
-                boxShadow: showLeft ? '-4px 0 0 0 #5b5bd6' : showRight ? '4px 0 0 0 #5b5bd6' : 'none',
+                boxShadow: showLeft ? `-4px 0 0 0 ${ui.accent.main}` : showRight ? `4px 0 0 0 ${ui.accent.main}` : 'none',
                 borderRadius: 1
               }}
             >

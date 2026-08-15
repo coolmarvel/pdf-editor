@@ -9,8 +9,13 @@ domain: development
 
 ## P1 — 다음 릴리스에서 다뤄야 함
 
-- [ ] **사용자 v1.5.2 설치 테스트** — Windows exe + macOS DMG(`arm64`/`x64`) 설치/실행,
-      X/체크 사전 크기 조절·ESC 도구 해제·워터마크 커서 실물 확인
+- [ ] **사용자 v1.5.3 설치 테스트** — 새 툴바 아이콘 20종·그린 테마 실물 확인,
+      이미지→페이지 가져오기(휴대폰 사진 EXIF 회전, 대용량, webp) 확인
+- [ ] **Windows exe v1.5.3 굽기** — 이번 세션은 macOS라 DMG만 생성. WSL 세션에서 `npm run dist:win`
+- [ ] 랜딩 화면에서 이미지 열기 지원 여부 결정 — 현재는 PDF만(드롭·파일선택 모두).
+      이미지를 떨구면 "PDF 파일만 열 수 있습니다"가 뜬다. 지원하려면 `main/index.ts`의
+      `fs:openPdf` 필터 + `Landing.tsx` 드롭 핸들러 확장 필요
+- [ ] 이미지 페이지 여백 옵션 검토 — 현재 여백 0 고정. "약간 여백" 선택지 요구가 나오면 추가
 - [ ] macOS Developer ID 인증서 발급 후 정식 codesign + notarization 적용
 - [ ] 혼합 모드 저장 결과 실물 검증 — Adobe/크롬 뷰어에서 화면과 동일한지 (백드롭 래스터 조각 방식)
 - [ ] 지우개 도형 종류 확장 검토 (Guru: Line/Arrow/Polygon/Polyline — 현재 사각형/원)

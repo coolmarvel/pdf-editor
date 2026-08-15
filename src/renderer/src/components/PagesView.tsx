@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import Box from '@mui/material/Box'
 import { useEditor } from '@renderer/store/editor'
+import { ui } from '@renderer/theme'
 import PageCanvas from './PageCanvas'
 
 /**
@@ -107,7 +108,7 @@ export default function PagesView(): JSX.Element {
       sx={{
         flex: 1,
         overflow: 'auto',
-        bgcolor: '#eceef1',
+        bgcolor: ui.surface.canvas,
         py: 3,
         display: 'flex',
         flexDirection: 'column',

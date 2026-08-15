@@ -8,46 +8,39 @@ import MenuItem from '@mui/material/MenuItem'
 import ListItemIcon from '@mui/material/ListItemIcon'
 import ListItemText from '@mui/material/ListItemText'
 import Divider from '@mui/material/Divider'
-import SvgIcon from '@mui/material/SvgIcon'
-import ArrowDropDownRounded from '@mui/icons-material/ArrowDropDownRounded'
-import ViewSidebarOutlined from '@mui/icons-material/ViewSidebarOutlined'
-import NearMeOutlined from '@mui/icons-material/NearMeOutlined'
-import UndoRounded from '@mui/icons-material/UndoRounded'
-import RedoRounded from '@mui/icons-material/RedoRounded'
-import TitleRounded from '@mui/icons-material/TitleRounded'
-import EditNoteRounded from '@mui/icons-material/EditNoteRounded'
-import BorderColorRounded from '@mui/icons-material/BorderColorRounded'
-import CreateRounded from '@mui/icons-material/CreateRounded'
-import ImageOutlined from '@mui/icons-material/ImageOutlined'
-import ApprovalRounded from '@mui/icons-material/ApprovalRounded'
-import CropSquareRounded from '@mui/icons-material/CropSquareRounded'
-import CircleOutlined from '@mui/icons-material/CircleOutlined'
-import CloseRounded from '@mui/icons-material/CloseRounded'
-import CheckRounded from '@mui/icons-material/CheckRounded'
-import DrawRounded from '@mui/icons-material/DrawRounded'
-import BrandingWatermarkOutlined from '@mui/icons-material/BrandingWatermarkOutlined'
-import ChatBubbleOutlineRounded from '@mui/icons-material/ChatBubbleOutlineRounded'
-import LinkRounded from '@mui/icons-material/LinkRounded'
-import RotateLeftRounded from '@mui/icons-material/RotateLeftRounded'
-import RotateRightRounded from '@mui/icons-material/RotateRightRounded'
-import ArticleOutlined from '@mui/icons-material/ArticleOutlined'
-import GridViewRounded from '@mui/icons-material/GridViewRounded'
-import CropPortraitRounded from '@mui/icons-material/CropPortraitRounded'
-import AutoStoriesOutlined from '@mui/icons-material/AutoStoriesOutlined'
-import FitScreenRounded from '@mui/icons-material/FitScreenRounded'
-import ViewAgendaOutlined from '@mui/icons-material/ViewAgendaOutlined'
-import CropDinRounded from '@mui/icons-material/CropDinRounded'
+import {
+  IconPages,
+  IconCursor,
+  IconUndo,
+  IconRedo,
+  IconText,
+  IconTextEdit,
+  IconEraser,
+  IconHighlighter,
+  IconPen,
+  IconImage,
+  IconStamp,
+  IconSquare,
+  IconCircle,
+  IconCross,
+  IconCheck,
+  IconSign,
+  IconWatermark,
+  IconNote,
+  IconLink,
+  IconLayout,
+  IconGrid,
+  IconChevronDown,
+  IconPageSingle,
+  IconPageDouble,
+  IconFit,
+  IconScrollContinuous,
+  IconScrollPaged,
+  IconRotateLeft,
+  IconRotateRight
+} from './icons'
 import { useEditor, type Tool } from '@renderer/store/editor'
 import { useT } from '@renderer/i18n'
-
-/** MUI에 지우개 아이콘이 없어 커스텀 SVG */
-function EraserIcon(props: React.ComponentProps<typeof SvgIcon>): JSX.Element {
-  return (
-    <SvgIcon {...props}>
-      <path d="M16.24 3.56l4.2 4.2c.78.78.78 2.05 0 2.83L12 19.03H7.66L3.4 14.78c-.78-.78-.78-2.05 0-2.83l9.19-9.2c.78-.78 2.05-.78 2.83 0l.82.81zM4.81 13.36l3.54 3.54 2.48-2.48-3.54-3.54-2.48 2.48zM5 21h14v2H5v-2z" />
-    </SvgIcon>
-  )
-}
 
 interface ToolBtnProps {
   label: string
@@ -93,7 +86,7 @@ function ToolBtn({ label, icon, active, disabled, onClick, onDropdown }: ToolBtn
       </Tooltip>
       {onDropdown && (
         <IconButton size="small" onClick={onDropdown} sx={{ borderRadius: 1.5, p: 0, width: 16, height: TOOLBTN_H, color: 'text.secondary', '&:hover': { bgcolor: '#f2f4f7' } }}>
-          <ArrowDropDownRounded sx={{ fontSize: 18 }} />
+          <IconChevronDown sx={{ fontSize: 15 }} />
         </IconButton>
       )}
     </Box>
@@ -165,19 +158,19 @@ export default function Toolbar(p: ToolbarProps): JSX.Element {
 
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', px: 1, py: 0.3, borderBottom: 1, borderColor: 'divider', bgcolor: '#fff', gap: 0.2, flexWrap: 'nowrap', overflowX: 'auto' }}>
-      <ToolBtn label={t('pages')} icon={<ViewSidebarOutlined />} active={p.sidebarOpen} onClick={p.onToggleSidebar} />
-      <ToolBtn label={t('select')} icon={<NearMeOutlined />} active={is('select')} onClick={() => setTool('select')} />
-      <ToolBtn label={t('undo')} icon={<UndoRounded />} disabled={!canUndo} onClick={() => undo()} />
-      <ToolBtn label={t('redo')} icon={<RedoRounded />} disabled={!canRedo} onClick={() => redo()} />
+      <ToolBtn label={t('pages')} icon={<IconPages />} active={p.sidebarOpen} onClick={p.onToggleSidebar} />
+      <ToolBtn label={t('select')} icon={<IconCursor />} active={is('select')} onClick={() => setTool('select')} />
+      <ToolBtn label={t('undo')} icon={<IconUndo />} disabled={!canUndo} onClick={() => undo()} />
+      <ToolBtn label={t('redo')} icon={<IconRedo />} disabled={!canRedo} onClick={() => redo()} />
 
       <Box sx={{ flex: 1 }} />
 
-      <ToolBtn label={t('addText')} icon={<TitleRounded />} active={is('addText')} onClick={() => toggle('addText')} />
+      <ToolBtn label={t('addText')} icon={<IconText />} active={is('addText')} onClick={() => toggle('addText')} />
       {/* 텍스트 수정은 토글(세션) — 켜져 있는 동안 하이라이트 유지, 다시 누르면 종료(변경 있으면 저장 확인) */}
-      <ToolBtn label={t('editText')} icon={<EditNoteRounded />} active={is('editText')} onClick={() => setTool(is('editText') ? 'select' : 'editText')} />
+      <ToolBtn label={t('editText')} icon={<IconTextEdit />} active={is('editText')} onClick={() => setTool(is('editText') ? 'select' : 'editText')} />
       <ToolBtn
         label={t('eraser')}
-        icon={<EraserIcon />}
+        icon={<IconEraser />}
         active={is('whiteout') || is('eraseDrawing')}
         onClick={() => {
           if (is('whiteout') || is('eraseDrawing')) {
@@ -191,11 +184,11 @@ export default function Toolbar(p: ToolbarProps): JSX.Element {
         }}
         onDropdown={(e) => setEraserMenu(e.currentTarget)}
       />
-      <ToolBtn label={t('highlight')} icon={<BorderColorRounded />} active={is('highlight')} onClick={() => toggle('highlight')} />
-      <ToolBtn label={t('pencil')} icon={<CreateRounded />} active={is('pencil')} onClick={() => toggle('pencil')} />
+      <ToolBtn label={t('highlight')} icon={<IconHighlighter />} active={is('highlight')} onClick={() => toggle('highlight')} />
+      <ToolBtn label={t('pencil')} icon={<IconPen />} active={is('pencil')} onClick={() => toggle('pencil')} />
       <ToolBtn
         label={lastImage === 'stamp' ? t('stamp') : t('image')}
-        icon={lastImage === 'stamp' ? <ApprovalRounded /> : <ImageOutlined />}
+        icon={lastImage === 'stamp' ? <IconStamp /> : <IconImage />}
         active={is('image') || is('stamp')}
         onClick={() => (lastImage === 'stamp' ? p.onOpenStamp() : p.onOpenImage())}
         onDropdown={(e) => setImageMenu(e.currentTarget)}
@@ -203,7 +196,7 @@ export default function Toolbar(p: ToolbarProps): JSX.Element {
       {/* 도형 버튼은 지우개(도형 덮기)와 연동: 지우개가 켜지면 그 도형(기본 사각형)을 표시하며 함께 활성 */}
       <ToolBtn
         label={shapeShown === 'ellipse' ? t('ellipse') : t('rectangle')}
-        icon={shapeShown === 'ellipse' ? <CircleOutlined /> : <CropSquareRounded />}
+        icon={shapeShown === 'ellipse' ? <IconCircle /> : <IconSquare />}
         active={is('rect') || is('ellipse') || is('whiteout')}
         onClick={() => {
           if (is('rect') || is('ellipse') || is('whiteout')) setTool('select')
@@ -211,18 +204,18 @@ export default function Toolbar(p: ToolbarProps): JSX.Element {
         }}
         onDropdown={(e) => setShapeMenu(e.currentTarget)}
       />
-      <ToolBtn label={t('cross')} icon={<CloseRounded />} active={is('cross')} onClick={() => toggle('cross')} />
-      <ToolBtn label={t('check')} icon={<CheckRounded />} active={is('check')} onClick={() => toggle('check')} />
-      <ToolBtn label={t('sign')} icon={<DrawRounded />} active={is('sign')} onClick={p.onOpenSign} />
-      <ToolBtn label={t('watermark')} icon={<BrandingWatermarkOutlined />} active={is('watermark')} onClick={() => toggle('watermark')} />
-      <ToolBtn label={t('note')} icon={<ChatBubbleOutlineRounded />} active={is('note')} onClick={() => toggle('note')} />
-      <ToolBtn label={t('link')} icon={<LinkRounded />} active={is('link')} onClick={() => toggle('link')} />
+      <ToolBtn label={t('cross')} icon={<IconCross />} active={is('cross')} onClick={() => toggle('cross')} />
+      <ToolBtn label={t('check')} icon={<IconCheck />} active={is('check')} onClick={() => toggle('check')} />
+      <ToolBtn label={t('sign')} icon={<IconSign />} active={is('sign')} onClick={p.onOpenSign} />
+      <ToolBtn label={t('watermark')} icon={<IconWatermark />} active={is('watermark')} onClick={() => toggle('watermark')} />
+      <ToolBtn label={t('note')} icon={<IconNote />} active={is('note')} onClick={() => toggle('note')} />
+      <ToolBtn label={t('link')} icon={<IconLink />} active={is('link')} onClick={() => toggle('link')} />
 
       <Box sx={{ flex: 1 }} />
 
       {/* 페이지 레이아웃은 순수 메뉴 버튼 — 본체·⌄ 어느 쪽을 눌러도 패널 */}
-      <ToolBtn label={t('pageLayout')} icon={<ArticleOutlined />} onClick={(e) => setLayoutMenu(e.currentTarget)} onDropdown={(e) => setLayoutMenu(e.currentTarget)} />
-      <ToolBtn label={t('managePages')} icon={<GridViewRounded />} onClick={p.onManagePages} />
+      <ToolBtn label={t('pageLayout')} icon={<IconLayout />} onClick={(e) => setLayoutMenu(e.currentTarget)} onDropdown={(e) => setLayoutMenu(e.currentTarget)} />
+      <ToolBtn label={t('managePages')} icon={<IconGrid />} onClick={p.onManagePages} />
 
       {/* ── 지우개 메뉴 ── */}
       <Menu anchorEl={eraserMenu} open={!!eraserMenu} onClose={() => setEraserMenu(null)}>
@@ -236,7 +229,7 @@ export default function Toolbar(p: ToolbarProps): JSX.Element {
           }}
         >
           <ListItemIcon>
-            <EraserIcon fontSize="small" />
+            <IconEraser fontSize="small" />
           </ListItemIcon>
           <ListItemText primary={t('eraser')} secondary={t('eraserDesc')} />
         </MenuItem>
@@ -249,7 +242,7 @@ export default function Toolbar(p: ToolbarProps): JSX.Element {
           }}
         >
           <ListItemIcon>
-            <EraserIcon fontSize="small" />
+            <IconEraser fontSize="small" />
           </ListItemIcon>
           <ListItemText primary={t('eraseDrawing')} secondary={t('eraseDrawingDesc')} />
         </MenuItem>
@@ -265,7 +258,7 @@ export default function Toolbar(p: ToolbarProps): JSX.Element {
           }}
         >
           <ListItemIcon>
-            <ImageOutlined fontSize="small" />
+            <IconImage fontSize="small" />
           </ListItemIcon>
           <ListItemText>{t('image')}</ListItemText>
         </MenuItem>
@@ -277,7 +270,7 @@ export default function Toolbar(p: ToolbarProps): JSX.Element {
           }}
         >
           <ListItemIcon>
-            <ApprovalRounded fontSize="small" />
+            <IconStamp fontSize="small" />
           </ListItemIcon>
           <ListItemText>{t('stamp')}</ListItemText>
         </MenuItem>
@@ -298,7 +291,7 @@ export default function Toolbar(p: ToolbarProps): JSX.Element {
           }}
         >
           <ListItemIcon>
-            <CropSquareRounded fontSize="small" />
+            <IconSquare fontSize="small" />
           </ListItemIcon>
           <ListItemText>{t('rectangle')}</ListItemText>
         </MenuItem>
@@ -315,7 +308,7 @@ export default function Toolbar(p: ToolbarProps): JSX.Element {
           }}
         >
           <ListItemIcon>
-            <CircleOutlined fontSize="small" />
+            <IconCircle fontSize="small" />
           </ListItemIcon>
           <ListItemText>{t('ellipse')}</ListItemText>
         </MenuItem>
@@ -328,13 +321,13 @@ export default function Toolbar(p: ToolbarProps): JSX.Element {
             <Typography variant="body2">{t('pageMode')}</Typography>
             <Box sx={{ display: 'flex', gap: 0.3 }}>
               <LayoutBtn title={t('pageModeSingle')} selected={pageMode === 'single'} onClick={() => setPageMode('single')}>
-                <CropPortraitRounded fontSize="small" />
+                <IconPageSingle fontSize="small" />
               </LayoutBtn>
               <LayoutBtn title={t('pageModeDouble')} selected={pageMode === 'double'} onClick={() => setPageMode('double')}>
-                <AutoStoriesOutlined fontSize="small" />
+                <IconPageDouble fontSize="small" />
               </LayoutBtn>
               <LayoutBtn title={t('pageModeFit')} onClick={() => requestFit()}>
-                <FitScreenRounded fontSize="small" />
+                <IconFit fontSize="small" />
               </LayoutBtn>
             </Box>
           </Box>
@@ -343,10 +336,10 @@ export default function Toolbar(p: ToolbarProps): JSX.Element {
             <Typography variant="body2">{t('pageTransition')}</Typography>
             <Box sx={{ display: 'flex', gap: 0.3 }}>
               <LayoutBtn title={t('transitionContinuous')} selected={pageTransition === 'continuous'} onClick={() => setPageTransition('continuous')}>
-                <ViewAgendaOutlined fontSize="small" />
+                <IconScrollContinuous fontSize="small" />
               </LayoutBtn>
               <LayoutBtn title={t('transitionPaged')} selected={pageTransition === 'paged'} onClick={() => setPageTransition('paged')}>
-                <CropDinRounded fontSize="small" />
+                <IconScrollPaged fontSize="small" />
               </LayoutBtn>
             </Box>
           </Box>
@@ -361,7 +354,7 @@ export default function Toolbar(p: ToolbarProps): JSX.Element {
                   if (pg) pageRotate(new Set([pg.id]), -90)
                 }}
               >
-                <RotateLeftRounded fontSize="small" />
+                <IconRotateLeft fontSize="small" />
               </LayoutBtn>
               <LayoutBtn
                 title={t('rotateRight')}
@@ -370,7 +363,7 @@ export default function Toolbar(p: ToolbarProps): JSX.Element {
                   if (pg) pageRotate(new Set([pg.id]), 90)
                 }}
               >
-                <RotateRightRounded fontSize="small" />
+                <IconRotateRight fontSize="small" />
               </LayoutBtn>
             </Box>
           </Box>

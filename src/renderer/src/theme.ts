@@ -1,8 +1,12 @@
 import { createTheme } from '@mui/material/styles'
 
 /**
- * TailAdmin 디자인 언어를 MUI 테마로 이식한 스킨 (브랜드 색만 pdfguru 레드 유지).
+ * TailAdmin 디자인 언어를 MUI 테마로 이식한 스킨.
  * 모든 컴포넌트가 이 테마를 공유하므로 여기 한 곳이 "재사용 컴포넌트" 역할을 한다.
+ *
+ * 2026-08-15: 브랜드 색을 pdfguru 레드 → **딥 포레스트 그린**으로 교체하고,
+ * 선택 강조색(secondary)도 pdfguru 인디고(#5b5bd6) → 딥 시안으로 바꿔 벤치마크와 분리했다.
+ * 배경 그레이도 아주 옅은 녹색 기미를 넣어(캔버스/사이드바) 브랜드와 붙게 했다.
  *
  * 토큰 출처: tailadmin-nextjs-pro (globals.css / Button / Dropdown / InputField)
  * - 그레이: Untitled UI 스케일 (50 #f9fafb · 100 #f2f4f7 · 200 #e4e7ec · 300 #d0d5dd · 500 #667085 · 800 #1d2939 · 900 #101828)
@@ -25,20 +29,31 @@ export const ui = {
     800: '#1d2939',
     900: '#101828'
   },
-  // 브랜드(레드) 스케일 — TailAdmin brand-* 구조를 우리 색으로
+  // 브랜드(딥 포레스트 그린) 스케일 — TailAdmin brand-* 구조를 우리 색으로
   brand: {
-    50: '#fdeeee',
-    100: '#fadbdc',
-    500: '#e0343f',
-    600: '#c22832',
-    700: '#a82028'
+    50: '#eaf5ee',
+    100: '#cfe8da',
+    500: '#15803d',
+    600: '#126b33',
+    700: '#0e5628'
+  },
+  // 선택/삽입점 강조색 (도구 활성색인 그린과 구분되어야 한다)
+  accent: {
+    main: '#0e7490',
+    soft: '#e0f2f7'
+  },
+  /** 앱 배경 계열 — 순회색이 아니라 아주 옅은 녹색 기미를 준다 */
+  surface: {
+    canvas: '#e8ede9',
+    sidebar: '#f8faf8',
+    page: '#ffffff'
   },
   shadow: {
     xs: '0px 1px 2px 0px rgba(16, 24, 40, 0.05)',
     sm: '0px 1px 3px 0px rgba(16, 24, 40, 0.1), 0px 1px 2px 0px rgba(16, 24, 40, 0.06)',
     md: '0px 4px 8px -2px rgba(16, 24, 40, 0.1), 0px 2px 4px -2px rgba(16, 24, 40, 0.06)',
     lg: '0px 12px 16px -4px rgba(16, 24, 40, 0.08), 0px 4px 6px -2px rgba(16, 24, 40, 0.03)',
-    focusRing: '0px 0px 0px 4px rgba(224, 52, 63, 0.12)'
+    focusRing: '0px 0px 0px 4px rgba(21, 128, 61, 0.14)'
   }
 } as const
 
@@ -46,8 +61,8 @@ export const theme = createTheme({
   palette: {
     mode: 'light',
     primary: { main: ui.brand[500], dark: ui.brand[600], light: ui.brand[50] },
-    secondary: { main: '#5b5bd6' },
-    background: { default: ui.gray[50], paper: '#ffffff' },
+    secondary: { main: ui.accent.main, light: ui.accent.soft },
+    background: { default: '#f6f9f7', paper: '#ffffff' },
     text: { primary: ui.gray[900], secondary: ui.gray[500] },
     divider: ui.gray[200]
   },

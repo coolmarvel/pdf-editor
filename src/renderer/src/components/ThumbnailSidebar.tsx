@@ -23,7 +23,10 @@ import UploadFileRounded from '@mui/icons-material/UploadFileRounded'
 import NoteAddOutlined from '@mui/icons-material/NoteAddOutlined'
 import { useEditor } from '@renderer/store/editor'
 import { useT } from '@renderer/i18n'
+import { ui } from '@renderer/theme'
 import { buildPdf } from '@renderer/pdf/save'
+import { IMAGE_ACCEPT } from '@renderer/pdf/imageToPdf'
+import { IconImage } from './icons'
 import ThumbCanvas from './ThumbCanvas'
 
 const MIN_W = 150
@@ -47,6 +50,8 @@ export default function ThumbnailSidebar({ onManagePages }: { onManagePages: () 
   const pageRemove = useEditor((s) => s.pageRemove)
   const pageInsertBlank = useEditor((s) => s.pageInsertBlank)
   const pageImport = useEditor((s) => s.pageImport)
+  const pageImportImages = useEditor((s) => s.pageImportImages)
+  const setNotice = useEditor((s) => s.setNotice)
   const pageMoveToIndex = useEditor((s) => s.pageMoveToIndex)
   const fileName = useEditor((s) => s.fileName)
 
@@ -63,6 +68,7 @@ export default function ThumbnailSidebar({ onManagePages }: { onManagePages: () 
   const [dropIdx, setDropIdx] = useState<number | null>(null)
   const dragRef = useRef<{ index: number; startY: number; active: boolean; drop: number | null } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const imageRef = useRef<HTMLInputElement>(null)
   const insertAtRef = useRef(0)
   const listRef = useRef<HTMLDivElement>(null)
 
@@ -95,6 +101,19 @@ export default function ThumbnailSidebar({ onManagePages }: { onManagePages: () 
     if (!file) return
     const bytes = new Uint8Array(await file.arrayBuffer())
     await pageImport(bytes, insertAtRef.current)
+  }
+
+  /** ⊕ 위치에 이미지들을 각각 1페이지로 삽입 */
+  async function onImportImages(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
+    const files = Array.from(e.target.files ?? [])
+    e.target.value = ''
+    if (files.length === 0) return
+    try {
+      await pageImportImages(files, insertAtRef.current)
+      setNotice({ msg: t('imagePagesAdded'), severity: 'success' })
+    } catch {
+      setNotice({ msg: t('imageImportFailed'), severity: 'error' })
+    }
   }
 
   /** 컨테이너 기준 드래그 위치 → 삽입점 계산 (썸네일 중앙 기준 위/아래) */
@@ -142,7 +161,7 @@ export default function ThumbnailSidebar({ onManagePages }: { onManagePages: () 
   )
 
   return (
-    <Box sx={{ position: 'relative', width, flexShrink: 0, borderRight: 1, borderColor: 'divider', bgcolor: '#fcfcfd', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ position: 'relative', width, flexShrink: 0, borderRight: 1, borderColor: 'divider', bgcolor: ui.surface.sidebar, display: 'flex', flexDirection: 'column' }}>
       <Box ref={listRef} sx={{ flex: 1, overflowY: 'auto', p: 1.5, pt: 1.5 }}>
         <Button fullWidth size="small" variant="outlined" color="inherit" startIcon={<GridViewRounded />} onClick={onManagePages} sx={{ mb: 0.5 }}>
           {t('managePages')}
@@ -235,7 +254,7 @@ export default function ThumbnailSidebar({ onManagePages }: { onManagePages: () 
           height: '100%',
           cursor: 'col-resize',
           zIndex: 5,
-          '&:hover': { bgcolor: 'rgba(91,91,214,.18)' }
+          '&:hover': { bgcolor: 'rgba(21,128,61,.18)' }
         }}
       />
 
@@ -343,6 +362,20 @@ export default function ThumbnailSidebar({ onManagePages }: { onManagePages: () 
         </MenuItem>
         <MenuItem
           onClick={() => {
+            if (addMenu) {
+              insertAtRef.current = addMenu.index
+              imageRef.current?.click()
+            }
+            setAddMenu(null)
+          }}
+        >
+          <ListItemIcon>
+            <IconImage fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>{t('uploadImage')}</ListItemText>
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
             if (addMenu) pageInsertBlank(addMenu.index)
             setAddMenu(null)
           }}
@@ -355,6 +388,7 @@ export default function ThumbnailSidebar({ onManagePages }: { onManagePages: () 
       </Menu>
 
       <input ref={fileRef} type="file" accept="application/pdf" hidden onChange={(e) => void onImportFile(e)} />
+      <input ref={imageRef} type="file" accept={IMAGE_ACCEPT} multiple hidden onChange={(e) => void onImportImages(e)} />
     </Box>
   )
 }

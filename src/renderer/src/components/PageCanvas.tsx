@@ -870,8 +870,8 @@ export default function PageCanvas({ page, zoom }: Props): JSX.Element {
               top: `${sp.rect.y * 100}%`,
               width: `${sp.rect.w * 100}%`,
               height: `${sp.rect.h * 100}%`,
-              outline: '1px solid rgba(91,91,214,.45)',
-              bgcolor: 'rgba(91,91,214,.06)',
+              outline: '1px solid rgba(14,116,144,.45)',
+              bgcolor: 'rgba(14,116,144,.07)',
               pointerEvents: 'none'
             }}
           />

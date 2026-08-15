@@ -22,7 +22,7 @@ import VerticalAlignCenterRounded from '@mui/icons-material/VerticalAlignCenterR
 import VerticalAlignBottomRounded from '@mui/icons-material/VerticalAlignBottomRounded'
 import DeleteOutlineRounded from '@mui/icons-material/DeleteOutlineRounded'
 import AddRounded from '@mui/icons-material/AddRounded'
-import ArrowDropDownRounded from '@mui/icons-material/ArrowDropDownRounded'
+import { IconChevronDown } from './icons'
 import FormatColorTextRounded from '@mui/icons-material/FormatColorTextRounded'
 import FormatColorFillRounded from '@mui/icons-material/FormatColorFillRounded'
 import BorderColorRounded from '@mui/icons-material/BorderColorRounded'
@@ -206,7 +206,7 @@ function NoneSwatch({ selected, onClick, size = 24 }: { selected?: boolean; onCl
       right: -3,
       top: '50%',
       height: 2,
-      bgcolor: '#e0343f',
+      bgcolor: '#d92d20' /* "색 없음" 사선 — 브랜드색이 아니라 경고 레드 */,
       transform: 'rotate(-45deg)'
     }
   } as const
@@ -235,7 +235,7 @@ function PaletteControl({ value, onChange, allowNone, title, icon }: PaletteCont
           ) : (
             <NoneSwatch size={18} />
           )}
-          <ArrowDropDownRounded sx={{ fontSize: 18, color: ui.gray[500] }} />
+          <IconChevronDown sx={{ fontSize: 15, color: ui.gray[500] }} />
         </ButtonBase>
       </Tooltip>
       <Popover open={!!anchor} anchorEl={anchor} onClose={() => setAnchor(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}>
@@ -283,7 +283,7 @@ function OpacityControl({ value, onChange }: { value: number; onChange: (v: numb
       <Tooltip title={t('opacity')}>
         <ButtonBase onClick={(e) => setAnchor(e.currentTarget)} sx={{ ...boxBtnSx, px: 1 }}>
           <Typography sx={{ fontSize: 14.5, minWidth: 38, textAlign: 'left' }}>{Math.round(value * 100)}%</Typography>
-          <ArrowDropDownRounded sx={{ fontSize: 18, color: ui.gray[500] }} />
+          <IconChevronDown sx={{ fontSize: 15, color: ui.gray[500] }} />
         </ButtonBase>
       </Tooltip>
       <Popover open={!!anchor} anchorEl={anchor} onClose={() => setAnchor(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}>
