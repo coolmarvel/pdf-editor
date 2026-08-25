@@ -1,6 +1,6 @@
 /* 1.3.0 페이지 기능 시각 검증: 사이드바 메뉴/드래그/⊕, 레이아웃 모드, 언어 전환 */
 const path = require('path')
-const ROOT = '/home/jace/pdf-editor'
+const ROOT = path.join(__dirname, '..')
 const { _electron } = require(path.join(ROOT, 'node_modules', 'playwright-core'))
 const { PDFDocument, StandardFonts } = require(path.join(ROOT, 'node_modules', 'pdf-lib'))
 const OUT = process.env.E2E_OUT ?? __dirname
@@ -88,7 +88,7 @@ async function main() {
   await win.waitForTimeout(300)
   await win.screenshot({ path: path.join(OUT, 'l8-layout-panel.png') })
   // 두 쪽 보기
-  await win.click('[data-testid="AutoStoriesOutlinedIcon"]')
+  await win.click('[data-testid="IconPageDoubleIcon"]')
   await win.waitForTimeout(600)
   await win.keyboard.press('Escape')
   await win.waitForTimeout(300)
@@ -96,7 +96,7 @@ async function main() {
   // 한 장씩 보기
   await win.click('button:has-text("레이아웃")')
   await win.waitForTimeout(300)
-  await win.click('[data-testid="CropDinRoundedIcon"]')
+  await win.click('[data-testid="IconScrollPagedIcon"]')
   await win.waitForTimeout(400)
   await win.keyboard.press('Escape')
   await win.waitForTimeout(300)

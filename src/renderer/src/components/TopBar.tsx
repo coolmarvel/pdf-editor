@@ -7,13 +7,9 @@ import IconButton from '@mui/material/IconButton'
 import Button from '@mui/material/Button'
 import Tooltip from '@mui/material/Tooltip'
 import CircularProgress from '@mui/material/CircularProgress'
-import PictureAsPdfRounded from '@mui/icons-material/PictureAsPdfRounded'
-import EditOutlined from '@mui/icons-material/EditOutlined'
-import PrintOutlined from '@mui/icons-material/PrintOutlined'
-import DownloadRounded from '@mui/icons-material/DownloadRounded'
-import CheckRounded from '@mui/icons-material/CheckRounded'
 import { useEditor } from '@renderer/store/editor'
 import { useT } from '@renderer/i18n'
+import { Check, Download, FileText, Pencil, Printer } from './icons'
 
 export interface TopBarProps {
   busy: boolean
@@ -31,7 +27,7 @@ export default function TopBar({ busy, onPrint, onDownload, onDone }: TopBarProp
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', px: 2, py: 1, bgcolor: '#fff', borderBottom: 1, borderColor: 'divider', gap: 2 }}>
       <Stack direction="row" spacing={0.8} alignItems="center">
-        <PictureAsPdfRounded color="primary" sx={{ fontSize: 26 }} />
+        <FileText color="primary" sx={{ fontSize: 26 }} />
         <Typography fontWeight={800} sx={{ whiteSpace: 'nowrap' }}>
           {t('appName')}
         </Typography>
@@ -55,7 +51,7 @@ export default function TopBar({ busy, onPrint, onDownload, onDone }: TopBarProp
             </Typography>
             <Tooltip title={t('rename')}>
               <IconButton size="small" onClick={() => setRenaming(true)}>
-                <EditOutlined fontSize="small" />
+                <Pencil fontSize="small" />
               </IconButton>
             </Tooltip>
           </>
@@ -68,18 +64,18 @@ export default function TopBar({ busy, onPrint, onDownload, onDone }: TopBarProp
       <Tooltip title={t('print')}>
         <span>
           <IconButton disabled={busy} onClick={onPrint}>
-            <PrintOutlined />
+            <Printer />
           </IconButton>
         </span>
       </Tooltip>
       <Tooltip title={t('saveAsPdf')}>
         <span>
           <IconButton disabled={busy} onClick={onDownload}>
-            <DownloadRounded />
+            <Download />
           </IconButton>
         </span>
       </Tooltip>
-      <Button variant="contained" startIcon={<CheckRounded />} disabled={busy} onClick={onDone} sx={{ borderRadius: 99, px: 3 }}>
+      <Button variant="contained" startIcon={<Check />} disabled={busy} onClick={onDone} sx={{ borderRadius: 99, px: 3 }}>
         {t('done')}
       </Button>
     </Box>

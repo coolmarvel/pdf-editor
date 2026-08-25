@@ -186,10 +186,6 @@ export function rotateObjectCW(o: PageObject): PageObject {
       return { ...o, cover: rotateRectCW(o.cover), box: rotateRectCW(o.box) }
     case 'stroke':
       return { ...o, points: o.points.map(rotatePointCW) }
-    case 'shape':
-      return { ...o, rect: rotateRectCW(o.rect) }
-    case 'image':
-      return { ...o, rect: rotateRectCW(o.rect) }
     case 'watermark':
       // 비트맵은 rect 기준으로 그려지므로 각도도 함께 90도 누적
       return { ...o, rect: rotateRectCW(o.rect), angle: (o.angle + 90) % 360 }
@@ -197,6 +193,8 @@ export function rotateObjectCW(o: PageObject): PageObject {
       const [x, y] = rotatePointCW([o.x, o.y])
       return { ...o, x, y }
     }
+    case 'shape':
+    case 'image':
     case 'link':
       return { ...o, rect: rotateRectCW(o.rect) }
   }
@@ -212,41 +210,76 @@ export function textBoxRect(t: TextObj): Rect {
   return { x: t.x, y: t.y, w: t.w > 0 ? t.w : 0.1, h: t.h > 0 ? Math.max(t.h, contentH) : contentH }
 }
 
+/** 노트 아이콘의 히트 영역 크기(정규화) — 히트테스트·선택 외곽선 공용 */
+export const NOTE_HIT_SIZE = 0.03
+
+/**
+ * 객체의 축정렬 표시 상자(정규화). 선택 외곽선·이동·리사이즈·히트테스트가 공유한다.
+ * stroke 는 점 집합이라 상자 개념이 없어 null. 회전 텍스트는 회전 전 상자를 돌려준다(호출부가 역회전).
+ */
+export function objectRect(o: PageObject): Rect | null {
+  switch (o.type) {
+    case 'text':
+      return textBoxRect(o)
+    case 'editText':
+      return o.box
+    case 'note':
+      return { x: o.x, y: o.y, w: NOTE_HIT_SIZE, h: NOTE_HIT_SIZE }
+    case 'stroke':
+      return null
+    case 'shape':
+    case 'image':
+    case 'watermark':
+    case 'link':
+      // watermark tile 도 중앙 셀만 — 전체 페이지를 잡으면 다른 객체 클릭을 다 삼킨다
+      return o.rect
+  }
+}
+
+/**
+ * objectRect 의 역: 상자를 객체 필드로 되돌리는 패치. text 는 w/h 까지 쓰고(리사이즈),
+ * note 는 위치만 (크기는 고정), stroke 는 상자가 없으므로 빈 패치.
+ */
+export function setObjectRect(o: PageObject, r: Rect): Partial<PageObject> {
+  switch (o.type) {
+    case 'text':
+      return { x: r.x, y: r.y, w: r.w, h: r.h }
+    case 'editText':
+      return { box: r }
+    case 'note':
+      return { x: r.x, y: r.y }
+    case 'stroke':
+      return {}
+    case 'shape':
+    case 'image':
+    case 'watermark':
+    case 'link':
+      return { rect: r }
+  }
+}
+
+/**
+ * 점 (x,y) 를 중심 (cx,cy) 기준으로 deg(시계방향) 만큼 **역회전**한 정규화 좌표.
+ * 회전은 px 공간에서 일어나므로 aspect(페이지 폭/높이)로 x 를 보정해 계산한 뒤 되돌린다.
+ * 회전 텍스트 히트테스트·캐럿 위치·리사이즈가 같은 식을 쓴다.
+ */
+export function unrotatePoint(x: number, y: number, cx: number, cy: number, deg: number, aspect: number): [number, number] {
+  const pcx = cx * aspect
+  const a = (-deg * Math.PI) / 180
+  const dx = x * aspect - pcx
+  const dy = y - cy
+  return [(pcx + dx * Math.cos(a) - dy * Math.sin(a)) / aspect, cy + dx * Math.sin(a) + dy * Math.cos(a)]
+}
+
 /**
  * 점이 객체에 닿는지 (지우개·선택 히트테스트, tol = 정규화 거리).
  * aspect = 페이지 폭/높이 — 회전 텍스트는 px 공간에서 돌아가므로 역회전에 필요.
  */
 export function hitTest(o: PageObject, x: number, y: number, tol: number, aspect = 1): boolean {
-  const inRect = (r: Rect): boolean => x >= r.x - tol && x <= r.x + r.w + tol && y >= r.y - tol && y <= r.y + r.h + tol
-  switch (o.type) {
-    case 'text': {
-      const r = textBoxRect(o)
-      const rot = o.rotation ?? 0
-      if (rot === 0) return inRect(r)
-      // 클릭점을 상자 중심 기준으로 역회전한 뒤 축정렬 검사 (px 공간 = aspect 보정)
-      const cx = (r.x + r.w / 2) * aspect
-      const cy = r.y + r.h / 2
-      const a = (-rot * Math.PI) / 180
-      const dx = x * aspect - cx
-      const dy = y - cy
-      const ux = (cx + dx * Math.cos(a) - dy * Math.sin(a)) / aspect
-      const uy = cy + dx * Math.sin(a) + dy * Math.cos(a)
-      return ux >= r.x - tol && ux <= r.x + r.w + tol && uy >= r.y - tol && uy <= r.y + r.h + tol
-    }
-    case 'editText':
-      return inRect(o.box)
-    case 'stroke':
-      return o.points.some(([px, py]) => Math.hypot(px - x, py - y) < tol + o.width / 2)
-    case 'shape':
-      return inRect(o.rect)
-    case 'image':
-      return inRect(o.rect)
-    case 'watermark':
-      // tile 도 중앙 셀만 — 전체 페이지를 잡으면 다른 객체 클릭을 다 삼킨다
-      return inRect(o.rect)
-    case 'note':
-      return inRect({ x: o.x, y: o.y, w: 0.03, h: 0.03 })
-    case 'link':
-      return inRect(o.rect)
-  }
+  if (o.type === 'stroke') return o.points.some(([px, py]) => Math.hypot(px - x, py - y) < tol + o.width / 2)
+  const r = objectRect(o)!
+  const rot = o.type === 'text' ? o.rotation ?? 0 : 0
+  // 클릭점을 상자 중심 기준으로 역회전한 뒤 축정렬 검사
+  const [ux, uy] = rot === 0 ? [x, y] : unrotatePoint(x, y, r.x + r.w / 2, r.y + r.h / 2, rot, aspect)
+  return ux >= r.x - tol && ux <= r.x + r.w + tol && uy >= r.y - tol && uy <= r.y + r.h + tol
 }

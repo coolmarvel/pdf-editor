@@ -11,32 +11,8 @@ import Divider from '@mui/material/Divider'
 import Popover from '@mui/material/Popover'
 import ButtonBase from '@mui/material/ButtonBase'
 import Stack from '@mui/material/Stack'
-import FormatBoldRounded from '@mui/icons-material/FormatBoldRounded'
-import FormatItalicRounded from '@mui/icons-material/FormatItalicRounded'
-import FormatUnderlinedRounded from '@mui/icons-material/FormatUnderlinedRounded'
-import FormatAlignLeftRounded from '@mui/icons-material/FormatAlignLeftRounded'
-import FormatAlignCenterRounded from '@mui/icons-material/FormatAlignCenterRounded'
-import FormatAlignRightRounded from '@mui/icons-material/FormatAlignRightRounded'
-import VerticalAlignTopRounded from '@mui/icons-material/VerticalAlignTopRounded'
-import VerticalAlignCenterRounded from '@mui/icons-material/VerticalAlignCenterRounded'
-import VerticalAlignBottomRounded from '@mui/icons-material/VerticalAlignBottomRounded'
-import DeleteOutlineRounded from '@mui/icons-material/DeleteOutlineRounded'
-import AddRounded from '@mui/icons-material/AddRounded'
-import { IconChevronDown } from './icons'
-import FormatColorTextRounded from '@mui/icons-material/FormatColorTextRounded'
-import FormatColorFillRounded from '@mui/icons-material/FormatColorFillRounded'
-import BorderColorRounded from '@mui/icons-material/BorderColorRounded'
-import ContrastRounded from '@mui/icons-material/ContrastRounded'
-import LineWeightRounded from '@mui/icons-material/LineWeightRounded'
-import LineStyleRounded from '@mui/icons-material/LineStyleRounded'
-import LayersRounded from '@mui/icons-material/LayersRounded'
-import TextFieldsRounded from '@mui/icons-material/TextFieldsRounded'
-import BrandingWatermarkOutlined from '@mui/icons-material/BrandingWatermarkOutlined'
-import ImageOutlined from '@mui/icons-material/ImageOutlined'
-import RotateRightRounded from '@mui/icons-material/RotateRightRounded'
-import AspectRatioRounded from '@mui/icons-material/AspectRatioRounded'
-import GridOnRounded from '@mui/icons-material/GridOnRounded'
-import AutoStoriesOutlined from '@mui/icons-material/AutoStoriesOutlined'
+import type { SxProps, Theme } from '@mui/material/styles'
+import { AlignCenter, AlignLeft, AlignRight, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd, AlignVerticalJustifyStart, Baseline, Bold, BookOpen, Contrast, Droplets, Grid3x3, IconChevronDown, ImageIcon, Italic, Layers, Maximize, Minus, PaintBucket, PenLine, Plus, RotateCw, Spline, Trash2, Type, Underline } from './icons'
 import { useEditor, type TextStyle } from '@renderer/store/editor'
 import type { PageObject, TextObj, EditTextObj, ShapeObj, NoteObj, StrokeObj, WatermarkObj, DashStyle, BlendMode } from '@core/objects'
 import { FONT_STACKS, measureTextWidthPx } from '@renderer/editor/draw'
@@ -44,6 +20,7 @@ import { renderWatermarkText } from '@renderer/editor/watermark'
 import { fileToDataUrl } from '@renderer/editor/stamp'
 import { useT, type I18nKey } from '@renderer/i18n'
 import { ui } from '@renderer/theme'
+import SwatchRow from './ui/SwatchRow'
 
 /**
  * 컨텍스트 바 (Guru 문법): 컨트롤마다 [의미 아이콘] + [36px 통일 높이 박스] 로 묶고
@@ -103,38 +80,93 @@ const BLEND_MODES: { v: BlendMode; label: string }[] = [
   { v: 'exclusion', label: 'Exclusion' }
 ]
 
-function BlendSelect({ value, onChange }: { value: BlendMode; onChange: (b: BlendMode) => void }): JSX.Element {
-  const t = useT()
-  return (
-    <Group icon={<LayersRounded />} tooltip={t('blendMode')}>
-      <Select size="small" value={value} onChange={(e) => onChange(e.target.value as BlendMode)} sx={{ ...selectSx, minWidth: 118 }} MenuProps={{ PaperProps: { sx: { maxHeight: 380 } } }}>
-        {BLEND_MODES.map((b) => (
-          <MenuItem key={b.v} value={b.v}>
-            {b.label}
-          </MenuItem>
-        ))}
-      </Select>
+interface SelectControlProps<T> {
+  icon?: React.ReactNode
+  tooltip?: string
+  value: T
+  onChange: (v: T) => void
+  items: { v: T; label: React.ReactNode; sx?: React.ComponentProps<typeof MenuItem>['sx'] }[]
+  minWidth?: number
+  /** 드롭다운 최대 높이 (없으면 MUI 기본) */
+  menuMaxH?: number
+  sx?: React.ComponentProps<typeof Select>['sx']
+}
+
+/**
+ * 셀렉트 공통 뼈대: icon 이 있으면 [아이콘+툴팁] Group 으로 감싸고, 없으면 셀렉트만 (상위 Group 안에 놓일 때).
+ * MUI Select 는 MenuItem 의 value 를 타입 그대로 돌려주므로 숫자/리터럴 값도 그대로 쓴다.
+ */
+function SelectControl<T extends string | number>({ icon, tooltip, value, onChange, items, minWidth, menuMaxH, sx }: SelectControlProps<T>): JSX.Element {
+  const sel = (
+    <Select
+      size="small"
+      value={value}
+      onChange={(e) => onChange(e.target.value as T)}
+      sx={{ ...selectSx, ...(minWidth ? { minWidth } : {}), ...(sx as object) }}
+      MenuProps={menuMaxH ? { PaperProps: { sx: { maxHeight: menuMaxH } } } : undefined}
+    >
+      {items.map((it) => (
+        <MenuItem key={it.v} value={it.v} sx={it.sx}>
+          {it.label}
+        </MenuItem>
+      ))}
+    </Select>
+  )
+  return icon ? (
+    <Group icon={icon} tooltip={tooltip}>
+      {sel}
     </Group>
+  ) : (
+    sel
   )
 }
 
+interface NumberSelectProps {
+  value: number
+  /** 프리셋 목록 — 현재 값이 없으면 끼워 넣어 정렬 (현재 값 표시 보장) */
+  list: readonly number[]
+  onChange: (v: number) => void
+  unit?: string
+  icon?: React.ReactNode
+  tooltip?: string
+  minWidth?: number
+}
+
+/** "목록 ∪ 현재 값, 오름차순" 숫자 셀렉트 (굵기·글자 크기·각도·크기 % 공용) */
+function NumberSelect({ value, list, onChange, unit = '', icon, tooltip, minWidth }: NumberSelectProps): JSX.Element {
+  const items = [...new Set([...list, value])].sort((a, b) => a - b).map((n) => ({ v: n, label: `${n}${unit}` }))
+  return <SelectControl icon={icon} tooltip={tooltip} value={value} onChange={onChange} items={items} minWidth={minWidth} />
+}
+
+const FONT_ITEMS = Object.entries(FONT_STACKS).map(([name, stack]) => ({ v: name, label: name, sx: { fontFamily: stack } }))
+
+/** 글꼴 셀렉트 — 현재 글꼴로 표시. 텍스트 도구/편집 객체/워터마크 공용 */
+function FontSelect({ value, onChange, minWidth = 132, menuMaxH = 360 }: { value: string; onChange: (f: string) => void; minWidth?: number; menuMaxH?: number | null }): JSX.Element {
+  return (
+    <SelectControl
+      value={value}
+      onChange={onChange}
+      items={FONT_ITEMS}
+      minWidth={minWidth}
+      menuMaxH={menuMaxH ?? undefined}
+      sx={{ '& .MuiSelect-select': { py: 0.5, fontFamily: FONT_STACKS[value] } }}
+    />
+  )
+}
+
+function BlendSelect({ value, onChange }: { value: BlendMode; onChange: (b: BlendMode) => void }): JSX.Element {
+  const t = useT()
+  return <SelectControl icon={<Layers />} tooltip={t('blendMode')} value={value} onChange={onChange} items={BLEND_MODES} minWidth={118} menuMaxH={380} />
+}
+
 /** 테두리 선 스타일 — 항목을 실제 선 모양으로 표시 */
+const DASH_ITEMS = (['solid', 'dotted', 'dashed'] as const).map((d) => ({
+  v: d,
+  label: <Box sx={{ width: 40, borderTop: `2.5px ${d === 'solid' ? 'solid' : d === 'dotted' ? 'dotted' : 'dashed'} ${ui.gray[800]}`, my: '9px' }} />
+}))
 function DashSelect({ value, onChange }: { value: DashStyle; onChange: (d: DashStyle) => void }): JSX.Element {
   const t = useT()
-  const sample = (d: DashStyle): JSX.Element => (
-    <Box sx={{ width: 40, borderTop: `2.5px ${d === 'solid' ? 'solid' : d === 'dotted' ? 'dotted' : 'dashed'} ${ui.gray[800]}`, my: '9px' }} />
-  )
-  return (
-    <Group icon={<LineStyleRounded />} tooltip={t('borderStyle')}>
-      <Select size="small" value={value} onChange={(e) => onChange(e.target.value as DashStyle)} sx={selectSx}>
-        {(['solid', 'dotted', 'dashed'] as const).map((d) => (
-          <MenuItem key={d} value={d}>
-            {sample(d)}
-          </MenuItem>
-        ))}
-      </Select>
-    </Group>
-  )
+  return <SelectControl icon={<Spline />} tooltip={t('borderStyle')} value={value} onChange={onChange} items={DASH_ITEMS} />
 }
 
 /** pt ↔ 정규화(세로 842pt 기준) 변환 — UI 표기용 */
@@ -149,18 +181,7 @@ const PEN_WIDTHS = [1, 2, 3, 5, 8, 12, 18, 30]
 /** 선 굵기 셀렉트 (≡ 아이콘 + pt 목록, 현재 값 포함 보장) */
 function WidthSelect({ value, onChange, list = PEN_WIDTHS }: { value: number; onChange: (w: number) => void; list?: number[] }): JSX.Element {
   const t = useT()
-  const pt = widthToPt(value)
-  return (
-    <Group icon={<LineWeightRounded />} tooltip={t('thickness')}>
-      <Select size="small" value={pt} onChange={(e) => onChange(ptToWidth(Number(e.target.value)))} sx={{ ...selectSx, minWidth: 78 }}>
-        {[...new Set([...list, pt])].sort((a, b) => a - b).map((p) => (
-          <MenuItem key={p} value={p}>
-            {p} pt
-          </MenuItem>
-        ))}
-      </Select>
-    </Group>
-  )
+  return <NumberSelect icon={<Minus />} tooltip={t('thickness')} value={widthToPt(value)} list={list} onChange={(pt) => onChange(ptToWidth(pt))} unit=" pt" minWidth={78} />
 }
 
 /** pdfguru 스타일 프리셋 팔레트 (진한 6 / 파스텔 6 / 무채색 5) */
@@ -170,22 +191,12 @@ const PALETTE: string[][] = [
   ['#ffffff', '#d1d5db', '#9ca3af', '#4b5563', '#111111']
 ]
 
-function Swatch({ color, selected, onClick }: { color: string; selected: boolean; onClick: () => void }): JSX.Element {
-  return (
-    <ButtonBase
-      onClick={onClick}
-      sx={{
-        width: 24,
-        height: 24,
-        borderRadius: '50%',
-        bgcolor: color,
-        border: color.toLowerCase() === '#ffffff' ? `1px solid ${ui.gray[300]}` : '1px solid rgba(0,0,0,.08)',
-        outline: selected ? '2px solid #3b82f6' : 'none',
-        outlineOffset: 1
-      }}
-    />
-  )
-}
+/** 팔레트 스와치: 흰색만 회색 테두리, 선택은 파란 아웃라인 */
+const paletteSwatchSx = (color: string, selected: boolean): SxProps<Theme> => ({
+  border: color.toLowerCase() === '#ffffff' ? `1px solid ${ui.gray[300]}` : '1px solid rgba(0,0,0,.08)',
+  outline: selected ? '2px solid #3b82f6' : 'none',
+  outlineOffset: 1
+})
 
 /** "없음" 표시 (빨간 사선 원) — onClick 있으면 버튼 */
 function NoneSwatch({ selected, onClick, size = 24 }: { selected?: boolean; onClick?: () => void; size?: number }): JSX.Element {
@@ -242,12 +253,15 @@ function PaletteControl({ value, onChange, allowNone, title, icon }: PaletteCont
         <Box sx={{ p: 1.5 }}>
           <Stack spacing={0.8}>
             {PALETTE.map((row, ri) => (
-              <Stack key={ri} direction="row" spacing={0.8}>
-                {ri === PALETTE.length - 1 && allowNone && <NoneSwatch selected={value === null} onClick={() => onChange(null)} />}
-                {row.map((c) => (
-                  <Swatch key={c} color={c} selected={value?.toLowerCase() === c.toLowerCase()} onClick={() => onChange(c)} />
-                ))}
-              </Stack>
+              <SwatchRow
+                key={ri}
+                colors={row}
+                value={value}
+                onChange={onChange}
+                ripple
+                swatchSx={paletteSwatchSx}
+                prefix={ri === PALETTE.length - 1 && allowNone ? <NoneSwatch selected={value === null} onClick={() => onChange(null)} /> : undefined}
+              />
             ))}
             <Typography variant="caption" color="text.secondary" sx={{ pt: 0.5 }}>
               {t('customColor')}
@@ -257,7 +271,7 @@ function PaletteControl({ value, onChange, allowNone, title, icon }: PaletteCont
                 onClick={() => customRef.current?.click()}
                 sx={{ width: 24, height: 24, borderRadius: '50%', border: `1.5px dashed ${ui.gray[400]}`, color: ui.gray[500], position: 'relative' }}
               >
-                <AddRounded sx={{ fontSize: 16 }} />
+                <Plus sx={{ fontSize: 16 }} />
                 <input
                   ref={customRef}
                   type="color"
@@ -279,7 +293,7 @@ function OpacityControl({ value, onChange }: { value: number; onChange: (v: numb
   const t = useT()
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   return (
-    <Group icon={<ContrastRounded />} tooltip={t('opacity')}>
+    <Group icon={<Contrast />} tooltip={t('opacity')}>
       <Tooltip title={t('opacity')}>
         <ButtonBase onClick={(e) => setAnchor(e.currentTarget)} sx={{ ...boxBtnSx, px: 1 }}>
           <Typography sx={{ fontSize: 14.5, minWidth: 38, textAlign: 'left' }}>{Math.round(value * 100)}%</Typography>
@@ -313,14 +327,14 @@ interface TextControlValues {
 }
 
 const H_ALIGNS = [
-  { v: 'left' as const, icon: FormatAlignLeftRounded, label: 'alignLeft' as I18nKey },
-  { v: 'center' as const, icon: FormatAlignCenterRounded, label: 'alignCenter' as I18nKey },
-  { v: 'right' as const, icon: FormatAlignRightRounded, label: 'alignRight' as I18nKey }
+  { v: 'left' as const, icon: AlignLeft, label: 'alignLeft' as I18nKey },
+  { v: 'center' as const, icon: AlignCenter, label: 'alignCenter' as I18nKey },
+  { v: 'right' as const, icon: AlignRight, label: 'alignRight' as I18nKey }
 ]
 const V_ALIGNS = [
-  { v: 'top' as const, icon: VerticalAlignTopRounded, label: 'alignTop' as I18nKey },
-  { v: 'middle' as const, icon: VerticalAlignCenterRounded, label: 'alignMiddle' as I18nKey },
-  { v: 'bottom' as const, icon: VerticalAlignBottomRounded, label: 'alignBottom' as I18nKey }
+  { v: 'top' as const, icon: AlignVerticalJustifyStart, label: 'alignTop' as I18nKey },
+  { v: 'middle' as const, icon: AlignVerticalJustifyCenter, label: 'alignMiddle' as I18nKey },
+  { v: 'bottom' as const, icon: AlignVerticalJustifyEnd, label: 'alignBottom' as I18nKey }
 ]
 
 /** 토글형 아이콘 버튼 (B/I/U, 정렬) — 켜지면 브랜드 틴트 */
@@ -345,99 +359,164 @@ function TIcon({ title, on, onClick, children }: { title: string; on?: boolean; 
   )
 }
 
-function TextControls({ v, patch }: { v: TextControlValues; patch: (p: Partial<TextControlValues>) => void }): JSX.Element {
+type TextFeature = 'underline' | 'align' | 'valign' | 'bg'
+const ALL_TEXT_FEATURES: TextFeature[] = ['underline', 'align', 'valign', 'bg']
+
+interface TextControlsProps {
+  /** editText 객체는 밑줄/정렬/배경이 없어 필수 필드만 요구한다 */
+  v: Pick<TextControlValues, 'font' | 'size' | 'bold' | 'italic' | 'color' | 'opacity'> & Partial<TextControlValues>
+  patch: (p: Partial<TextControlValues>) => void
+  /** 표시할 부가 컨트롤. 기본 전부. editText 는 [] (글꼴·크기·B/I·색·불투명도만) */
+  features?: TextFeature[]
+  /** 글꼴 드롭다운 최대 높이 (null = MUI 기본) */
+  fontMenuMaxH?: number | null
+}
+
+function TextControls({ v, patch, features = ALL_TEXT_FEATURES, fontMenuMaxH = 360 }: TextControlsProps): JSX.Element {
   const t = useT()
+  const has = (f: TextFeature): boolean => features.includes(f)
   return (
     <>
-      <Group icon={<TextFieldsRounded />}>
-        <Select
-          size="small"
-          value={v.font}
-          onChange={(e) => patch({ font: e.target.value })}
-          sx={{ ...selectSx, minWidth: 132, '& .MuiSelect-select': { py: 0.5, fontFamily: FONT_STACKS[v.font] } }}
-          MenuProps={{ PaperProps: { sx: { maxHeight: 360 } } }}
-        >
-          {Object.entries(FONT_STACKS).map(([name, stack]) => (
-            <MenuItem key={name} value={name} sx={{ fontFamily: stack }}>
-              {name}
-            </MenuItem>
-          ))}
-        </Select>
-        <Select size="small" value={sizeToPt(v.size)} onChange={(e) => patch({ size: ptToSize(Number(e.target.value)) })} sx={{ ...selectSx, minWidth: 66 }}>
-          {[...new Set([...FONT_SIZES, sizeToPt(v.size)])].sort((a, b) => a - b).map((pt) => (
-            <MenuItem key={pt} value={pt}>
-              {pt}
-            </MenuItem>
-          ))}
-        </Select>
+      <Group icon={<Type />}>
+        <FontSelect value={v.font} onChange={(font) => patch({ font })} menuMaxH={fontMenuMaxH} />
+        <NumberSelect value={sizeToPt(v.size)} list={FONT_SIZES} onChange={(pt) => patch({ size: ptToSize(pt) })} minWidth={66} />
       </Group>
       <GDivider />
       <Group>
         <TIcon title={t('bold')} on={v.bold} onClick={() => patch({ bold: !v.bold })}>
-          <FormatBoldRounded fontSize="small" />
+          <Bold fontSize="small" />
         </TIcon>
         <TIcon title={t('italic')} on={v.italic} onClick={() => patch({ italic: !v.italic })}>
-          <FormatItalicRounded fontSize="small" />
+          <Italic fontSize="small" />
         </TIcon>
-        <TIcon title={t('underline')} on={v.underline} onClick={() => patch({ underline: !v.underline })}>
-          <FormatUnderlinedRounded fontSize="small" />
-        </TIcon>
-      </Group>
-      <GDivider />
-      <Group>
-        {H_ALIGNS.map(({ v: a, icon: Icon, label }) => (
-          <TIcon key={a} title={t(label)} on={v.align === a} onClick={() => patch({ align: a })}>
-            <Icon fontSize="small" />
+        {has('underline') && (
+          <TIcon title={t('underline')} on={v.underline} onClick={() => patch({ underline: !v.underline })}>
+            <Underline fontSize="small" />
           </TIcon>
-        ))}
+        )}
       </Group>
       <GDivider />
-      <Group>
-        {V_ALIGNS.map(({ v: a, icon: Icon, label }) => (
-          <TIcon key={a} title={t(label)} on={v.valign === a} onClick={() => patch({ valign: a })}>
-            <Icon fontSize="small" />
-          </TIcon>
-        ))}
-      </Group>
-      <GDivider />
-      <PaletteControl icon={<FormatColorTextRounded />} title={t('textColor')} value={v.color} onChange={(c) => patch({ color: c ?? '#111111' })} />
-      <PaletteControl icon={<FormatColorFillRounded />} title={t('bgColor')} value={v.bgColor} onChange={(bgColor) => patch({ bgColor })} allowNone />
+      {has('align') && (
+        <>
+          <Group>
+            {H_ALIGNS.map(({ v: a, icon: Icon, label }) => (
+              <TIcon key={a} title={t(label)} on={v.align === a} onClick={() => patch({ align: a })}>
+                <Icon fontSize="small" />
+              </TIcon>
+            ))}
+          </Group>
+          <GDivider />
+        </>
+      )}
+      {has('valign') && (
+        <>
+          <Group>
+            {V_ALIGNS.map(({ v: a, icon: Icon, label }) => (
+              <TIcon key={a} title={t(label)} on={v.valign === a} onClick={() => patch({ valign: a })}>
+                <Icon fontSize="small" />
+              </TIcon>
+            ))}
+          </Group>
+          <GDivider />
+        </>
+      )}
+      <PaletteControl icon={<Baseline />} title={t('textColor')} value={v.color} onChange={(c) => patch({ color: c ?? '#111111' })} />
+      {has('bg') && <PaletteControl icon={<PaintBucket />} title={t('bgColor')} value={v.bgColor ?? null} onChange={(bgColor) => patch({ bgColor })} allowNone />}
       <OpacityControl value={v.opacity} onChange={(opacity) => patch({ opacity })} />
     </>
   )
 }
 
-const NOTE_COLORS = ['#facc15', '#fb923c', '#ef4444', '#ec4899', '#3b82f6', '#22c55e']
+/** 선(연필/형광펜) 공용 컨트롤: 색 · 채움 · 불투명도 · 굵기 · 혼합 */
+interface StrokeValues {
+  color: string
+  fill: string | null
+  opacity: number
+  width: number
+  blend: BlendMode
+}
+function StrokeControls({ v, patch, widths, colorFallback }: { v: StrokeValues; patch: (p: Partial<StrokeValues>) => void; widths?: number[]; colorFallback: string }): JSX.Element {
+  const t = useT()
+  return (
+    <>
+      <PaletteControl icon={<PenLine />} title={t('color')} value={v.color} onChange={(c) => patch({ color: c ?? colorFallback })} />
+      <PaletteControl icon={<PaintBucket />} title={t('fillColor')} value={v.fill} onChange={(fill) => patch({ fill })} allowNone />
+      <GDivider />
+      <OpacityControl value={v.opacity} onChange={(opacity) => patch({ opacity })} />
+      <GDivider />
+      <WidthSelect value={v.width} onChange={(width) => patch({ width })} list={widths} />
+      <GDivider />
+      <BlendSelect value={v.blend} onChange={(blend) => patch({ blend })} />
+    </>
+  )
+}
 
+/** 도형(사각/타원/지우개) 공용 컨트롤: 테두리색 · [채움] · [불투명도] · 굵기 · 선 스타일 */
+interface ShapeValues {
+  stroke: string
+  fill: string | null
+  opacity: number
+  strokeWidth: number
+  dash: DashStyle
+}
+interface ShapeControlsProps {
+  v: ShapeValues
+  patch: (p: Partial<ShapeValues>) => void
+  strokeTitle: I18nKey
+  strokeFallback: string
+  /** 'none' = 채움 컨트롤 없음, 'optional' = 없음 허용, 'required' = 항상 색 (지우개는 흰색으로 되돌린다) */
+  fill: 'none' | 'optional' | 'required'
+  opacity?: boolean
+}
+function ShapeControls({ v, patch, strokeTitle, strokeFallback, fill, opacity }: ShapeControlsProps): JSX.Element {
+  const t = useT()
+  return (
+    <>
+      <PaletteControl icon={<PenLine />} title={t(strokeTitle)} value={v.stroke} onChange={(c) => patch({ stroke: c ?? strokeFallback })} />
+      {fill === 'optional' && <PaletteControl icon={<PaintBucket />} title={t('fillColor')} value={v.fill} onChange={(fill) => patch({ fill })} allowNone />}
+      {fill === 'required' && <PaletteControl icon={<PaintBucket />} title={t('fillColor')} value={v.fill} onChange={(c) => patch({ fill: c ?? '#ffffff' })} />}
+      <GDivider />
+      {opacity && (
+        <>
+          <OpacityControl value={v.opacity} onChange={(opacity) => patch({ opacity })} />
+          <GDivider />
+        </>
+      )}
+      <WidthSelect value={v.strokeWidth} onChange={(strokeWidth) => patch({ strokeWidth })} />
+      <GDivider />
+      <DashSelect value={v.dash} onChange={(dash) => patch({ dash })} />
+    </>
+  )
+}
+
+const NOTE_COLORS = ['#facc15', '#fb923c', '#ef4444', '#ec4899', '#3b82f6', '#22c55e']
+const noteSwatchSx = (_: string, selected: boolean): SxProps<Theme> => ({ cursor: 'pointer', border: selected ? `2px solid ${ui.gray[800]}` : '2px solid transparent' })
+
+const MARK_SIZES = [12, 16, 20, 24, 32, 40, 56]
 const WM_ANGLES = [-90, -45, -30, 0, 30, 45, 90]
 const WM_SIZES = [25, 35, 50, 70, 90] // 페이지 폭 %
 
 /** 기울기 셀렉트 — 도구 설정과 선택된 워터마크 객체가 공유 */
 function AngleSelect({ value, onChange }: { value: number; onChange: (a: number) => void }): JSX.Element {
   const t = useT()
-  return (
-    <Group icon={<RotateRightRounded />} tooltip={t('wmAngle')}>
-      <Select size="small" value={value} onChange={(e) => onChange(Number(e.target.value))} sx={{ ...selectSx, minWidth: 84 }}>
-        {[...new Set([...WM_ANGLES, value])].sort((a, b) => a - b).map((a) => (
-          <MenuItem key={a} value={a}>
-            {a}°
-          </MenuItem>
-        ))}
-      </Select>
-    </Group>
-  )
+  return <NumberSelect icon={<RotateCw />} tooltip={t('wmAngle')} value={value} list={WM_ANGLES} onChange={onChange} unit="°" minWidth={84} />
 }
 
 /** 배치 셀렉트 (단일/바둑판) — 도구 설정과 선택된 워터마크 객체가 공유 */
 function LayoutSelect({ value, onChange }: { value: 'single' | 'tile'; onChange: (l: 'single' | 'tile') => void }): JSX.Element {
   const t = useT()
   return (
-    <Group icon={<GridOnRounded />} tooltip={t('wmLayout')}>
-      <Select size="small" value={value} onChange={(e) => onChange(e.target.value as 'single' | 'tile')} sx={{ ...selectSx, minWidth: 96 }}>
-        <MenuItem value="single">{t('wmSingle')}</MenuItem>
-        <MenuItem value="tile">{t('wmTile')}</MenuItem>
-      </Select>
-    </Group>
+    <SelectControl
+      icon={<Grid3x3 />}
+      tooltip={t('wmLayout')}
+      value={value}
+      onChange={onChange}
+      items={[
+        { v: 'single', label: t('wmSingle') },
+        { v: 'tile', label: t('wmTile') }
+      ]}
+      minWidth={96}
+    />
   )
 }
 
@@ -464,16 +543,21 @@ function WatermarkToolControls(): JSX.Element {
 
   return (
     <>
-      <Group icon={<BrandingWatermarkOutlined />} tooltip={t('watermark')}>
-        <Select size="small" value={ws.mode} onChange={(e) => setWs({ mode: e.target.value as 'text' | 'image' })} sx={{ ...selectSx, minWidth: 96 }}>
-          <MenuItem value="text">{t('wmText')}</MenuItem>
-          <MenuItem value="image">{t('wmImage')}</MenuItem>
-        </Select>
-      </Group>
+      <SelectControl
+        icon={<Droplets />}
+        tooltip={t('watermark')}
+        value={ws.mode}
+        onChange={(mode) => setWs({ mode })}
+        items={[
+          { v: 'text', label: t('wmText') },
+          { v: 'image', label: t('wmImage') }
+        ]}
+        minWidth={96}
+      />
       <GDivider />
       {ws.mode === 'text' ? (
         <>
-          <Group icon={<TextFieldsRounded />}>
+          <Group icon={<Type />}>
             <Box
               component="input"
               value={ws.text}
@@ -493,24 +577,12 @@ function WatermarkToolControls(): JSX.Element {
                 '&::placeholder': { color: ui.gray[400] }
               }}
             />
-            <Select
-              size="small"
-              value={ws.font}
-              onChange={(e) => setWs({ font: e.target.value })}
-              sx={{ ...selectSx, minWidth: 112, '& .MuiSelect-select': { py: 0.5, fontFamily: FONT_STACKS[ws.font] } }}
-              MenuProps={{ PaperProps: { sx: { maxHeight: 360 } } }}
-            >
-              {Object.entries(FONT_STACKS).map(([name, stack]) => (
-                <MenuItem key={name} value={name} sx={{ fontFamily: stack }}>
-                  {name}
-                </MenuItem>
-              ))}
-            </Select>
+            <FontSelect value={ws.font} onChange={(font) => setWs({ font })} minWidth={112} />
           </Group>
-          <PaletteControl icon={<FormatColorTextRounded />} title={t('textColor')} value={ws.color} onChange={(c) => setWs({ color: c ?? '#9ca3af' })} />
+          <PaletteControl icon={<Baseline />} title={t('textColor')} value={ws.color} onChange={(c) => setWs({ color: c ?? '#9ca3af' })} />
         </>
       ) : (
-        <Group icon={<ImageOutlined />} tooltip={t('wmImage')}>
+        <Group icon={<ImageIcon />} tooltip={t('wmImage')}>
           {ws.image && <Box component="img" src={ws.image.dataUrl} sx={{ height: CTL_H - 6, maxWidth: 72, objectFit: 'contain', border: `1px solid ${ui.gray[300]}`, borderRadius: 1, bgcolor: '#fff' }} />}
           <Button variant="outlined" size="small" onClick={() => fileRef.current?.click()} sx={{ height: CTL_H, textTransform: 'none', whiteSpace: 'nowrap' }}>
             {t('wmChooseImage')}
@@ -530,22 +602,19 @@ function WatermarkToolControls(): JSX.Element {
       <GDivider />
       <OpacityControl value={ws.opacity} onChange={(opacity) => setWs({ opacity })} />
       <AngleSelect value={ws.angle} onChange={(angle) => setWs({ angle })} />
-      <Group icon={<AspectRatioRounded />} tooltip={t('wmSize')}>
-        <Select size="small" value={Math.round(ws.scale * 100)} onChange={(e) => setWs({ scale: Number(e.target.value) / 100 })} sx={{ ...selectSx, minWidth: 78 }}>
-          {[...new Set([...WM_SIZES, Math.round(ws.scale * 100)])].sort((a, b) => a - b).map((p) => (
-            <MenuItem key={p} value={p}>
-              {p}%
-            </MenuItem>
-          ))}
-        </Select>
-      </Group>
+      <NumberSelect icon={<Maximize />} tooltip={t('wmSize')} value={Math.round(ws.scale * 100)} list={WM_SIZES} onChange={(p) => setWs({ scale: p / 100 })} unit="%" minWidth={78} />
       <LayoutSelect value={ws.layout} onChange={(layout) => setWs({ layout })} />
-      <Group icon={<AutoStoriesOutlined />} tooltip={t('wmScope')}>
-        <Select size="small" value={ws.scope} onChange={(e) => setWs({ scope: e.target.value as 'all' | 'current' })} sx={{ ...selectSx, minWidth: 118 }}>
-          <MenuItem value="all">{t('wmAllPages')}</MenuItem>
-          <MenuItem value="current">{t('wmCurrentPage')}</MenuItem>
-        </Select>
-      </Group>
+      <SelectControl
+        icon={<BookOpen />}
+        tooltip={t('wmScope')}
+        value={ws.scope}
+        onChange={(scope) => setWs({ scope })}
+        items={[
+          { v: 'all', label: t('wmAllPages') },
+          { v: 'current', label: t('wmCurrentPage') }
+        ]}
+        minWidth={118}
+      />
       <GDivider />
       <Button variant="contained" size="small" disabled={!canApply} onClick={apply} sx={{ height: CTL_H, px: 2, textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap' }}>
         {t('wmApply')}
@@ -591,7 +660,7 @@ export default function SubToolbar(): JSX.Element | null {
           <Box sx={{ flex: 1 }} />
           <Tooltip title={t('deleteSelected')}>
             <IconButton size="small" onClick={() => removeObject(selected.pageId, selected.objectId)}>
-              <DeleteOutlineRounded />
+              <Trash2 />
             </IconButton>
           </Tooltip>
         </>
@@ -625,84 +694,51 @@ export default function SubToolbar(): JSX.Element | null {
     if (selObj.type === 'editText') {
       const et = selObj as EditTextObj
       const patch = (p: Partial<EditTextObj>): void => updateObject(selected.pageId, selected.objectId, p)
-      return bar(
-        <>
-          <Group icon={<TextFieldsRounded />}>
-            <Select size="small" value={et.font} onChange={(e) => patch({ font: e.target.value })} sx={{ ...selectSx, minWidth: 132, '& .MuiSelect-select': { py: 0.5, fontFamily: FONT_STACKS[et.font] } }}>
-              {Object.entries(FONT_STACKS).map(([name, stack]) => (
-                <MenuItem key={name} value={name} sx={{ fontFamily: stack }}>
-                  {name}
-                </MenuItem>
-              ))}
-            </Select>
-            <Select size="small" value={sizeToPt(et.size)} onChange={(e) => patch({ size: ptToSize(Number(e.target.value)) })} sx={{ ...selectSx, minWidth: 66 }}>
-              {[...new Set([...FONT_SIZES, sizeToPt(et.size)])].sort((a, b) => a - b).map((pt) => (
-                <MenuItem key={pt} value={pt}>
-                  {pt}
-                </MenuItem>
-              ))}
-            </Select>
-          </Group>
-          <GDivider />
-          <Group>
-            <TIcon title={t('bold')} on={et.bold} onClick={() => patch({ bold: !et.bold })}>
-              <FormatBoldRounded fontSize="small" />
-            </TIcon>
-            <TIcon title={t('italic')} on={et.italic} onClick={() => patch({ italic: !et.italic })}>
-              <FormatItalicRounded fontSize="small" />
-            </TIcon>
-          </Group>
-          <GDivider />
-          <PaletteControl icon={<FormatColorTextRounded />} title={t('textColor')} value={et.color} onChange={(c) => patch({ color: c ?? '#111111' })} />
-          <OpacityControl value={et.opacity} onChange={(opacity) => patch({ opacity })} />
-        </>
-      )
+      // 밑줄/정렬/배경 없음 — editText 객체엔 그 속성이 없다
+      return bar(<TextControls v={et} patch={(p) => patch(p as Partial<EditTextObj>)} features={[]} fontMenuMaxH={null} />)
     }
     if (selObj.type === 'shape') {
       const sh = selObj as ShapeObj
       const patch = (p: Partial<ShapeObj>): void => updateObject(selected.pageId, selected.objectId, p)
       return bar(
-        <>
-          <PaletteControl icon={<BorderColorRounded />} title={t('strokeColor')} value={sh.stroke} onChange={(c) => patch({ stroke: c ?? '#2563eb' })} />
-          {(sh.kind === 'rect' || sh.kind === 'ellipse') && (
-            <PaletteControl icon={<FormatColorFillRounded />} title={t('fillColor')} value={sh.fill} onChange={(fill) => patch({ fill })} allowNone />
-          )}
-          <GDivider />
-          <OpacityControl value={sh.opacity} onChange={(opacity) => patch({ opacity })} />
-          <GDivider />
-          <WidthSelect value={sh.strokeWidth} onChange={(strokeWidth) => patch({ strokeWidth })} />
-          <GDivider />
-          <DashSelect value={sh.dash ?? 'solid'} onChange={(dash) => patch({ dash })} />
-        </>
+        <ShapeControls
+          v={{ ...sh, dash: sh.dash ?? 'solid' }}
+          patch={patch}
+          strokeTitle="strokeColor"
+          strokeFallback="#2563eb"
+          fill={sh.kind === 'rect' || sh.kind === 'ellipse' ? 'optional' : 'none'}
+          opacity
+        />
       )
     }
     if (selObj.type === 'note') {
       const n = selObj as NoteObj
       return bar(
-        <>
-          <Typography variant="caption" color="text.secondary">
-            {t('noteColor')}
-          </Typography>
-          {NOTE_COLORS.map((c) => (
-            <Box key={c} onClick={() => updateObject(selected.pageId, selected.objectId, { color: c })} sx={{ width: 22, height: 22, borderRadius: '50%', bgcolor: c, cursor: 'pointer', border: n.color === c ? `2px solid ${ui.gray[800]}` : '2px solid transparent' }} />
-          ))}
-        </>
+        <SwatchRow
+          colors={NOTE_COLORS}
+          value={n.color}
+          onChange={(color) => updateObject(selected.pageId, selected.objectId, { color })}
+          size={22}
+          spacing={1.2}
+          swatchSx={noteSwatchSx}
+          prefix={
+            <Typography variant="caption" color="text.secondary">
+              {t('noteColor')}
+            </Typography>
+          }
+        />
       )
     }
     if (selObj.type === 'stroke') {
       const st = selObj as StrokeObj
       const patch = (p: Partial<StrokeObj>): void => updateObject(selected.pageId, selected.objectId, p)
       return bar(
-        <>
-          <PaletteControl icon={<BorderColorRounded />} title={t('color')} value={st.color} onChange={(c) => patch({ color: c ?? '#facc15' })} />
-          <PaletteControl icon={<FormatColorFillRounded />} title={t('fillColor')} value={st.fill ?? null} onChange={(fill) => patch({ fill })} allowNone />
-          <GDivider />
-          <OpacityControl value={st.opacity} onChange={(opacity) => patch({ opacity })} />
-          <GDivider />
-          <WidthSelect value={st.width} onChange={(width) => patch({ width })} list={[1, 2, 3, 5, 8, 12, 18, 30, 45]} />
-          <GDivider />
-          <BlendSelect value={st.blend ?? (st.kind === 'highlight' ? 'multiply' : 'normal')} onChange={(blend) => patch({ blend })} />
-        </>
+        <StrokeControls
+          v={{ ...st, fill: st.fill ?? null, blend: st.blend ?? (st.kind === 'highlight' ? 'multiply' : 'normal') }}
+          patch={patch}
+          widths={[1, 2, 3, 5, 8, 12, 18, 30, 45]}
+          colorFallback="#facc15"
+        />
       )
     }
     if (selObj.type === 'watermark') {
@@ -729,75 +765,25 @@ export default function SubToolbar(): JSX.Element | null {
     case 'editText':
       return bar(<TextControls v={textStyle} patch={(p) => setTextStyle(p as Partial<TextStyle>)} />)
     case 'pencil':
-      return bar(
-        <>
-          <PaletteControl icon={<BorderColorRounded />} title={t('color')} value={penStyle.color} onChange={(c) => setPenStyle({ color: c ?? '#2563eb' })} />
-          <PaletteControl icon={<FormatColorFillRounded />} title={t('fillColor')} value={penStyle.fill} onChange={(fill) => setPenStyle({ fill })} allowNone />
-          <GDivider />
-          <OpacityControl value={penStyle.opacity} onChange={(opacity) => setPenStyle({ opacity })} />
-          <GDivider />
-          <WidthSelect value={penStyle.width} onChange={(width) => setPenStyle({ width })} />
-          <GDivider />
-          <BlendSelect value={penStyle.blend} onChange={(blend) => setPenStyle({ blend })} />
-        </>
-      )
+      return bar(<StrokeControls v={penStyle} patch={setPenStyle} colorFallback="#2563eb" />)
     case 'highlight':
-      return bar(
-        <>
-          <PaletteControl icon={<BorderColorRounded />} title={t('color')} value={highlightStyle.color} onChange={(c) => setHighlightStyle({ color: c ?? '#facc15' })} />
-          <PaletteControl icon={<FormatColorFillRounded />} title={t('fillColor')} value={highlightStyle.fill} onChange={(fill) => setHighlightStyle({ fill })} allowNone />
-          <GDivider />
-          <OpacityControl value={highlightStyle.opacity} onChange={(opacity) => setHighlightStyle({ opacity })} />
-          <GDivider />
-          <WidthSelect value={highlightStyle.width} onChange={(width) => setHighlightStyle({ width })} list={[8, 12, 18, 30, 45]} />
-          <GDivider />
-          <BlendSelect value={highlightStyle.blend} onChange={(blend) => setHighlightStyle({ blend })} />
-        </>
-      )
+      return bar(<StrokeControls v={highlightStyle} patch={setHighlightStyle} widths={[8, 12, 18, 30, 45]} colorFallback="#facc15" />)
     case 'whiteout':
       // 지우개 = 도형으로 덮기 (Guru Eraser). 도형 선택은 메인 툴바의 도형 버튼(연동)에서
-      return bar(
-        <>
-          <PaletteControl icon={<BorderColorRounded />} title={t('borderColor')} value={eraserStyle.stroke} onChange={(c) => setEraserStyle({ stroke: c ?? '#ffffff' })} />
-          <PaletteControl icon={<FormatColorFillRounded />} title={t('fillColor')} value={eraserStyle.fill} onChange={(c) => setEraserStyle({ fill: c ?? '#ffffff' })} />
-          <GDivider />
-          <OpacityControl value={eraserStyle.opacity} onChange={(opacity) => setEraserStyle({ opacity })} />
-          <GDivider />
-          <WidthSelect value={eraserStyle.strokeWidth} onChange={(strokeWidth) => setEraserStyle({ strokeWidth })} />
-          <GDivider />
-          <DashSelect value={eraserStyle.dash} onChange={(dash) => setEraserStyle({ dash })} />
-        </>
-      )
+      return bar(<ShapeControls v={eraserStyle} patch={setEraserStyle as (p: Partial<ShapeValues>) => void} strokeTitle="borderColor" strokeFallback="#ffffff" fill="required" opacity />)
     case 'eraseDrawing':
       return bar(hint('hintEraseDrawing'))
     case 'rect':
     case 'ellipse':
-      return bar(
-        <>
-          <PaletteControl icon={<BorderColorRounded />} title={t('strokeColor')} value={shapeStyle.stroke} onChange={(c) => setShapeStyle({ stroke: c ?? '#2563eb' })} />
-          <PaletteControl icon={<FormatColorFillRounded />} title={t('fillColor')} value={shapeStyle.fill} onChange={(fill) => setShapeStyle({ fill })} allowNone />
-          <GDivider />
-          <WidthSelect value={shapeStyle.strokeWidth} onChange={(strokeWidth) => setShapeStyle({ strokeWidth })} />
-          <GDivider />
-          <DashSelect value={shapeStyle.dash} onChange={(dash) => setShapeStyle({ dash })} />
-        </>
-      )
+      return bar(<ShapeControls v={shapeStyle} patch={setShapeStyle} strokeTitle="strokeColor" strokeFallback="#2563eb" fill="optional" />)
     case 'cross':
     case 'check':
       // X/체크: 찍기 전에 색·크기를 정한다 — 커서가 이 크기 그대로 보이고 그대로 찍힌다
       return bar(
         <>
-          <PaletteControl icon={<BorderColorRounded />} title={t('strokeColor')} value={markStyle.color} onChange={(c) => setMarkStyle({ color: c ?? '#111111' })} />
+          <PaletteControl icon={<PenLine />} title={t('strokeColor')} value={markStyle.color} onChange={(c) => setMarkStyle({ color: c ?? '#111111' })} />
           <GDivider />
-          <Group icon={<AspectRatioRounded />} tooltip={t('wmSize')}>
-            <Select size="small" value={widthToPt(markStyle.size)} onChange={(e) => setMarkStyle({ size: ptToWidth(Number(e.target.value)) })} sx={{ ...selectSx, minWidth: 78 }}>
-              {[...new Set([12, 16, 20, 24, 32, 40, 56, widthToPt(markStyle.size)])].sort((a, b) => a - b).map((p) => (
-                <MenuItem key={p} value={p}>
-                  {p} pt
-                </MenuItem>
-              ))}
-            </Select>
-          </Group>
+          <NumberSelect icon={<Maximize />} tooltip={t('wmSize')} value={widthToPt(markStyle.size)} list={MARK_SIZES} onChange={(pt) => setMarkStyle({ size: ptToWidth(pt) })} unit=" pt" minWidth={78} />
           <GDivider />
           <WidthSelect value={shapeStyle.strokeWidth} onChange={(strokeWidth) => setShapeStyle({ strokeWidth })} />
         </>

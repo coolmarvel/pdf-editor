@@ -3,13 +3,8 @@ import Box from '@mui/material/Box'
 import Snackbar from '@mui/material/Snackbar'
 import Alert from '@mui/material/Alert'
 import Button from '@mui/material/Button'
-import Dialog from '@mui/material/Dialog'
-import DialogTitle from '@mui/material/DialogTitle'
-import DialogContent from '@mui/material/DialogContent'
-import DialogContentText from '@mui/material/DialogContentText'
-import DialogActions from '@mui/material/DialogActions'
 import { useEditor } from '@renderer/store/editor'
-import { useT } from '@renderer/i18n'
+import { useT, type I18nKey } from '@renderer/i18n'
 import { buildPdf } from '@renderer/pdf/save'
 import { fileToDataUrl } from '@renderer/editor/stamp'
 import TopBar from './TopBar'
@@ -21,6 +16,7 @@ import FloatingPager from './FloatingPager'
 import ManagePagesDialog from './ManagePagesDialog'
 import StampDialog from './StampDialog'
 import SignDialog from './SignDialog'
+import ConfirmDialog from './ui/ConfirmDialog'
 
 export default function Editor(): JSX.Element {
   const t = useT()
@@ -76,31 +72,31 @@ export default function Editor(): JSX.Element {
     return buildPdf({ pages: s.pages, objectsByPage: s.objectsByPage, displaySizes: s.displaySizes })
   }
 
-  async function onDownload(): Promise<void> {
+  /** 진행 표시(busy) + 실패 토스트 공통 래퍼 — 저장/인쇄 */
+  async function withBusy(fn: () => Promise<void>, errKey: I18nKey): Promise<void> {
     setBusy(true)
     try {
-      const bytes = await makePdf()
-      const s = useEditor.getState()
-      const path = await window.api.saveBuffer(`${s.fileName || 'document'}.pdf`, bytes)
-      if (path) setToast({ msg: t('savedToast'), severity: 'success', path })
+      await fn()
     } catch (err) {
-      setToast({ msg: `${t('saveFailed')}: ${err instanceof Error ? err.message : String(err)}`, severity: 'error' })
+      setToast({ msg: `${t(errKey)}: ${err instanceof Error ? err.message : String(err)}`, severity: 'error' })
     } finally {
       setBusy(false)
     }
   }
 
-  async function onPrint(): Promise<void> {
-    setBusy(true)
-    try {
+  const onDownload = (): Promise<void> =>
+    withBusy(async () => {
+      const bytes = await makePdf()
+      const s = useEditor.getState()
+      const path = await window.api.saveBuffer(`${s.fileName || 'document'}.pdf`, bytes)
+      if (path) setToast({ msg: t('savedToast'), severity: 'success', path })
+    }, 'saveFailed')
+
+  const onPrint = (): Promise<void> =>
+    withBusy(async () => {
       const bytes = await makePdf()
       await window.api.printPdf(bytes)
-    } catch (err) {
-      setToast({ msg: `${t('printFailed')}: ${err instanceof Error ? err.message : String(err)}`, severity: 'error' })
-    } finally {
-      setBusy(false)
-    }
-  }
+    }, 'printFailed')
 
   async function onImagePicked(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
     const f = e.target.files?.[0]
@@ -138,71 +134,56 @@ export default function Editor(): JSX.Element {
       <SignDialog open={signOpen} onClose={() => setSignOpen(false)} />
 
       {/* 완료 확인 */}
-      <Dialog open={doneOpen} onClose={() => setDoneOpen(false)}>
-        <DialogTitle>{t('finishTitle')}</DialogTitle>
-        <DialogContent>
-          <DialogContentText>{t('finishBody')}</DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button color="inherit" onClick={() => setDoneOpen(false)}>
-            {t('keepEditing')}
-          </Button>
-          <Button
-            color="inherit"
-            onClick={() => {
+      <ConfirmDialog
+        open={doneOpen}
+        onClose={() => setDoneOpen(false)}
+        title={t('finishTitle')}
+        body={t('finishBody')}
+        actions={[
+          { label: t('keepEditing'), onClick: () => setDoneOpen(false) },
+          {
+            label: t('dontSave'),
+            onClick: () => {
               setDoneOpen(false)
               useEditor.getState().closeDocument()
-            }}
-          >
-            {t('dontSave')}
-          </Button>
-          <Button
-            variant="contained"
-            onClick={async () => {
+            }
+          },
+          {
+            label: t('saveAndClose'),
+            primary: true,
+            onClick: async () => {
               setDoneOpen(false)
               await onDownload()
               useEditor.getState().closeDocument()
-            }}
-          >
-            {t('saveAndClose')}
-          </Button>
-        </DialogActions>
-      </Dialog>
+            }
+          }
+        ]}
+      />
 
       {/* 텍스트 수정 세션 종료: 변경 저장 확인 (Guru: Save changes before exiting?) */}
-      <Dialog open={editTextExitPrompt !== null} onClose={cancelEditTextExit}>
-        <DialogTitle>{t('editTextExitTitle')}</DialogTitle>
-        <DialogContent>
-          <DialogContentText>{t('editTextExitBody')}</DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button color="inherit" onClick={cancelEditTextExit}>
-            {t('keepEditing')}
-          </Button>
-          <Button color="inherit" onClick={() => endEditTextSession(false, editTextExitPrompt ?? 'select')}>
-            {t('dontSave')}
-          </Button>
-          <Button variant="contained" onClick={() => endEditTextSession(true, editTextExitPrompt ?? 'select')}>
-            {t('save')}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDialog
+        open={editTextExitPrompt !== null}
+        onClose={cancelEditTextExit}
+        title={t('editTextExitTitle')}
+        body={t('editTextExitBody')}
+        actions={[
+          { label: t('keepEditing'), onClick: cancelEditTextExit },
+          { label: t('dontSave'), onClick: () => endEditTextSession(false, editTextExitPrompt ?? 'select') },
+          { label: t('save'), primary: true, onClick: () => endEditTextSession(true, editTextExitPrompt ?? 'select') }
+        ]}
+      />
 
       {/* 텍스트 수정: 텍스트 상자 삭제 확인 (Guru: Are you sure you want to delete this text box?) */}
-      <Dialog open={!!deletePrompt} onClose={cancelDelete}>
-        <DialogTitle>{t('deleteTextTitle')}</DialogTitle>
-        <DialogContent>
-          <DialogContentText>{t('deleteTextBody')}</DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button color="inherit" onClick={cancelDelete}>
-            {t('cancel')}
-          </Button>
-          <Button variant="contained" onClick={confirmDelete}>
-            {t('erase')}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDialog
+        open={!!deletePrompt}
+        onClose={cancelDelete}
+        title={t('deleteTextTitle')}
+        body={t('deleteTextBody')}
+        actions={[
+          { label: t('cancel'), onClick: cancelDelete },
+          { label: t('erase'), primary: true, onClick: confirmDelete }
+        ]}
+      />
 
       <Snackbar open={!!toast} autoHideDuration={5000} onClose={() => setToast(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
         <Alert

@@ -10,14 +10,13 @@ import { createTheme } from '@mui/material/styles'
  *
  * 토큰 출처: tailadmin-nextjs-pro (globals.css / Button / Dropdown / InputField)
  * - 그레이: Untitled UI 스케일 (50 #f9fafb · 100 #f2f4f7 · 200 #e4e7ec · 300 #d0d5dd · 500 #667085 · 800 #1d2939 · 900 #101828)
- * - 섀도: shadow-theme-xs/sm/md/lg (부드러운 이중 레이어) + focus-ring(브랜드 12% 4px)
+ * - 섀도: shadow-theme-xs/lg (부드러운 이중 레이어) + focus-ring(브랜드 12% 4px)
  * - 라운드: 버튼/인풋 8px(rounded-lg) · 드롭다운 12px(rounded-xl) · 모달 16px(rounded-2xl)
  */
 
 // ── TailAdmin 토큰 ──
 export const ui = {
   gray: {
-    25: '#fcfcfd',
     50: '#f9fafb',
     100: '#f2f4f7',
     200: '#e4e7ec',
@@ -34,8 +33,7 @@ export const ui = {
     50: '#eaf5ee',
     100: '#cfe8da',
     500: '#15803d',
-    600: '#126b33',
-    700: '#0e5628'
+    600: '#126b33'
   },
   // 선택/삽입점 강조색 (도구 활성색인 그린과 구분되어야 한다)
   accent: {
@@ -45,13 +43,10 @@ export const ui = {
   /** 앱 배경 계열 — 순회색이 아니라 아주 옅은 녹색 기미를 준다 */
   surface: {
     canvas: '#e8ede9',
-    sidebar: '#f8faf8',
-    page: '#ffffff'
+    sidebar: '#f8faf8'
   },
   shadow: {
     xs: '0px 1px 2px 0px rgba(16, 24, 40, 0.05)',
-    sm: '0px 1px 3px 0px rgba(16, 24, 40, 0.1), 0px 1px 2px 0px rgba(16, 24, 40, 0.06)',
-    md: '0px 4px 8px -2px rgba(16, 24, 40, 0.1), 0px 2px 4px -2px rgba(16, 24, 40, 0.06)',
     lg: '0px 12px 16px -4px rgba(16, 24, 40, 0.08), 0px 4px 6px -2px rgba(16, 24, 40, 0.03)',
     focusRing: '0px 0px 0px 4px rgba(21, 128, 61, 0.14)'
   }

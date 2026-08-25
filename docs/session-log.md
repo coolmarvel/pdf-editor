@@ -1,7 +1,7 @@
 ---
 title: 세션 로그
 created: 2026-07-08
-updated: 2026-07-10
+updated: 2026-08-25
 domain: development
 ---
 
@@ -9,6 +9,76 @@ domain: development
 
 이 파일이 **"언제 무슨 일이 있었나"의 SSOT**다. 세션마다 최상단에 블록 추가.
 (2026-07-08부터 git 에 올리지만 커밋/푸시는 사용자가 직접·성긴 단위 — git history 를 이력 SSOT 로 삼지 않는다.)
+
+## 2026-08-25 (3) — v1.5.5: 동작 보존 리팩토링 (죽은 코드·중복·성능) + 웹 전환 복사본 분기
+
+**요청**: "그동안 작업만 해와서 코드를 돌아본 적이 없다" — 안 쓰는 라이브러리/코드 제거, 인터페이스로 재사용,
+알고리즘 개선. **기능·성능은 그대로거나 더 좋게.** (사용자가 /config 에서 워크플로우 on·large 로 설정 → 멀티 에이전트로 수행)
+
+**절차**: 감사 3건 병렬(죽은 코드 · 중복/재사용 · 성능) → 배치 A(core/store) → 배치 B(툴바/다이얼로그) ∥ 배치 C(캔버스/저장)
+→ 검증(typecheck·test·build·Electron e2e·스크린샷 픽셀 비교) → 리뷰어 2명이 원본 대비 동작 변화 사냥 → 확정분 수정. 7 에이전트.
+
+**제거 (죽은 코드)**: `@mui/icons-material` 의존, 스토어 `canUndo/canRedo/setPhase/pageMove`, core `appendDocument/movePages/canUndo/canRedo`,
+`tOf`, `isImageFile`, i18n 키 13쌍, theme 토큰 5개, 미사용 `Rotation` import.
+
+**공용화 (중복 → 인터페이스)**: `core/objects.ts` `objectRect/setObjectRect/unrotatePoint`(5곳의 kind 스위치 통합);
+스토어 `editPage/pageOp/step` 헬퍼(add/update/remove ×transient 6개 액션 → 1 헬퍼), `replaceObjects` 배치 액션, `selectCanUndo/Redo`;
+`components/ui/` `MenuAction`(메뉴 15개) · `ConfirmDialog`(3개) · `DialogHeader/Footer` · `SwatchRow`(4곳);
+`hooks/` `usePageImport`(사이드바=페이지관리 중복) · `useDragReorder`(리스트/그리드 드래그 정렬 공용);
+SubToolbar `SelectControl/NumberSelect/FontSelect/StrokeControls/ShapeControls`, `TextControls features` 로 editText 바 재사용;
+`editor/canvasUtil.ts` `makeCanvas/toBitmap/loadImage/renderTextBitmap/preloadObjectImages`(stamp·watermark·save·imageToPdf·draw 공용).
+
+**성능**: 스크롤마다 전 페이지 오버레이 캔버스 재할당하던 것 제거(`React.memo` PageCanvas, 크기 바뀔 때만 width/height 대입, paged 모드에서만 currentPage 구독);
+스크롤 현재 페이지 판정 O(n) 레이아웃 → 오프셋 캐시 + 이진탐색; 오프스크린 페이지/썸네일 캔버스 backing store 해제(메모리 상한);
+드래그 리드로우 rAF 병합(포인터 이벤트마다 React 리렌더 제거); pdf.js RenderTask **실제 취소**(`renderPage(opts.onTask/signal)` — 리뷰어가 찾은 레이스 수정);
+히트테스트 AABB 프리필터(WeakMap 캐시); 지우개 1 포인터 이벤트 = 스토어 1회 갱신; 텍스트 측정 캐시; 캐럿 이진탐색; 이미지 디코드 promise 캐시;
+저장 시 dataURL base64 왕복 제거(toBlob→bytes)·캔버스 즉시 해제·embedPage 캐시; 사이드바 `objectsByPage` 과다 구독 제거; 썸네일 지연 렌더·실제 폭 기준.
+
+**줄 수**: 7,323 → 7,601 (**+278**). 호출부 ~370줄 감소, 공용 모듈 신설 ~435줄 + 성능 코드 ~150줄 순증. "줄 수 감소" 목표는 미달 —
+대신 파일별 책임이 분리됐고 죽은 코드 0. 가장 큰 순증은 `useDragReorder`(140줄, 원래 중복 ~50줄) — 되돌릴지는 사용자 판단.
+
+**검증**: typecheck ✅ · test 21/21(objectRect/unrotatePoint 테스트 추가) ✅ · build ✅ · `visual-check.cjs` ✅ · `pages-check.cjs` ✅(하드코딩 경로·옛 testid 수정) ·
+스크린샷 베이스라인 대비 차이 0.04%(썸네일 텍스트 안티앨리어싱) → **`PDF편집기-Setup-1.5.5.exe` 바탕화면**.
+
+**웹 전환**: 이 시점의 `src/core` + `src/renderer/src` 를 `~/pdf-editor-live/packages/editor` 로 복사(별도 레포). 그쪽은 `window.api` → `Platform` 인터페이스로 치환.
+이후 두 저장소는 독립 — 에디터 수정 시 양쪽 반영(todo).
+
+## 2026-08-25 (2) — v1.5.4: 아이콘 전체를 lucide 로 통일
+
+**요청**: 현재 아이콘이 "내 스타일이 아니다". lucide 로 대체하는 것에 대한 의견 + 괜찮으면 진행.
+**판단**: 8/15 자체 stroke 세트가 lucide 문법(stroke·round cap·viewBox 24)과 같은 방향이라 통일감은 올라가고
+손그린 SVG 20종 유지보수가 사라진다. 또 툴바 밖(컨텍스트 바·다이얼로그·랜딩·페이저)은 여전히 MUI Material
+아이콘이라 두 세트가 섞여 있었다 → **앱 전체를 lucide 한 세트로**.
+
+**구현** (`src/renderer/src/components/icons.tsx` 전면 재작성, `lucide-react@1.34.0` 추가):
+- `wrap(LucideIcon)` = MUI `SvgIcon component={Icon} inheritViewBox` 래퍼. 기존 호출부의 `fontSize`/`sx`/`color`
+  API 유지. SvgIcon 의 `fill: currentColor` CSS 가 lucide `fill="none"` 속성을 덮어쓰므로 sx 로 되돌림. stroke 1.75.
+  `data-testid="<이름>Icon"` 을 내서 MUI 아이콘 규약(e2e 로케이터)과 호환.
+- 툴바 export 이름(`IconPages`…`IconRotateRight`)은 그대로 → `Toolbar.tsx` 무수정.
+  매핑: 페이지=PanelLeft, 선택=MousePointer2, 텍스트=Type, 텍스트수정=TextCursorInput, 지우개=Eraser,
+  형광펜=Highlighter, 연필=Pencil, 서명=Signature, 워터마크=Droplets, 주석=MessageSquare(StickyNote 는 빈 문서처럼
+  보여 교체), 링크=Link, 레이아웃=LayoutTemplate, 페이지관리=LayoutGrid, 단쪽/두쪽=RectangleVertical/Columns2,
+  맞춤=Maximize, 이어서/한장씩=GalleryVertical/Square, 회전=RotateCcw/RotateCw
+- `@mui/icons-material` 54종 사용처 8개 파일(TopBar·SubToolbar·FloatingPager·ThumbnailSidebar·SignDialog·
+  PageCanvas·ManagePagesDialog·Landing)을 스크립트로 일괄 이관. 같은 모듈에서 lucide 이름으로 export
+  (`Trash2`·`Plus`·`Printer`·`Download`·`Baseline`(글자색)·`PaintBucket`(채움)·`PenLine`(선색)·
+  `AlignVerticalJustify*`(세로정렬)·`Minus`(굵기)·`Spline`(선 스타일)·`Zap`·`Shield`·`BookOpen` 등).
+  `Image` 는 전역 생성자와 충돌 방지로 `ImageIcon`. `@mui/icons-material` 의존은 남아있으나 import 0 (제거는 todo).
+- `e2e/visual-check.cjs`: 하드코딩된 `/home/jace/pdf-editor` → `path.join(__dirname,'..')`, 로케이터를 새 testid 로.
+
+**검증**: typecheck ✅ · test 21/21 ✅ · build ✅ · Playwright e2e 완주 ✅ · 스크린샷 육안: 툴바·컨텍스트 바·
+페이저·사이드바 전부 한 톤. → `PDF편집기-Setup-1.5.4.exe` 바탕화면.
+
+## 2026-08-25 — Windows v1.5.3 인스톨러 + 웹 서비스 전환 설계는 새 저장소 `~/pdf-editor-live` 로
+
+- **v1.5.3 Windows exe 굽기**(todo P1 잔여): 이 WSL 에 `node_modules` 가 없어 `npm ci` 후 typecheck ✅ · test ✅ · build ✅ ·
+  `dist:win` ✅ → `/mnt/c/Users/user/Desktop/PDF편집기-Setup-1.5.3.exe` (옛 1.5.2 exe 는 정리). 코드 변경 없음, 버전 유지.
+- **웹 서비스(회원제·이용권/구독) 전환 설계**: 사용자 요청으로 **별도 프로젝트 `~/pdf-editor-live`** 를 신설하고
+  설계 전문은 그쪽 `docs/adr/0001-architecture.md` 에 두었다. 이 저장소 기준 핵심 사실만 남긴다:
+  Electron 의존은 `preload` api 5개·호출부 5곳뿐이라 `Platform` 인터페이스로 갈아끼우면 브라우저에서 그대로 동작 →
+  서버는 PDF 를 만지지 않는다. 에디터 코드는 `packages/editor` 로 **복사**해 시작(이 저장소는 그대로).
+  → 여기서 에디터 버그를 고치면 live 쪽에도 반영 필요 (todo 추가).
+- `pdf-editor-screenshots/` 의 2026-07-10 스크린샷(X/체크 배치 화면)은 v1.5.2 에서 처리된 피드백으로 보임 — 이동하지 않고 둠.
 
 ## 2026-08-15 — v1.5.3: 이미지→페이지 가져오기 + 툴바 아이콘 자체 세트 + 그린 테마
 
@@ -238,7 +308,7 @@ win 이 먼저 올라간 태그에선 422 실패했을 것). 하드코딩 `uploa
 
 ## 2026-07-09 — v1.4.6: 앱 식별자 seonghyunlee.pdfeditor 로 변경
 
-**요청**: macOS 번들 내부 식별자가 `xyz.chungmu.pdfeditor` 로 남아 있던 것을 개인 식별자로 변경.
+**요청**: macOS 번들 내부 식별자가 예전 값으로 남아 있던 것을 개인 식별자(`seonghyunlee.pdfeditor`)로 변경.
 
 **수정**: `package.json`의 `build.appId` 를 `seonghyunlee.pdfeditor` 로 변경. 이 값은 macOS
 `CFBundleIdentifier` 와 Electron Builder 앱 식별자에 반영된다.

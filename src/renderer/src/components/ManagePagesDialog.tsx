@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import Dialog from '@mui/material/Dialog'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -6,26 +6,15 @@ import IconButton from '@mui/material/IconButton'
 import Typography from '@mui/material/Typography'
 import Paper from '@mui/material/Paper'
 import Stack from '@mui/material/Stack'
-import Divider from '@mui/material/Divider'
 import Tooltip from '@mui/material/Tooltip'
-import AddRounded from '@mui/icons-material/AddRounded'
-import DeleteOutlineRounded from '@mui/icons-material/DeleteOutlineRounded'
-import ContentCopyRounded from '@mui/icons-material/ContentCopyRounded'
-import RotateLeftRounded from '@mui/icons-material/RotateLeftRounded'
-import RotateRightRounded from '@mui/icons-material/RotateRightRounded'
-import ArrowBackRounded from '@mui/icons-material/ArrowBackRounded'
-import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded'
-import UploadFileRounded from '@mui/icons-material/UploadFileRounded'
-import UndoRounded from '@mui/icons-material/UndoRounded'
-import RedoRounded from '@mui/icons-material/RedoRounded'
-import SelectAllRounded from '@mui/icons-material/SelectAllRounded'
-import DeselectRounded from '@mui/icons-material/DeselectRounded'
-import { useEditor } from '@renderer/store/editor'
+import { useEditor, selectCanUndo, selectCanRedo } from '@renderer/store/editor'
 import { useT } from '@renderer/i18n'
 import { ui } from '@renderer/theme'
-import { IMAGE_ACCEPT } from '@renderer/pdf/imageToPdf'
-import { IconImage } from './icons'
+import { usePageImport } from '@renderer/hooks/usePageImport'
+import { useDragReorder } from '@renderer/hooks/useDragReorder'
+import { ArrowLeft, ArrowRight, Copy, FileUp, IconImage, Plus, Redo2, RotateCcw, RotateCw, SquareDashed, SquareDashedMousePointer, Trash2, Undo2 } from './icons'
 import ThumbCanvas from './ThumbCanvas'
+import { DialogFooter } from './ui/DialogBars'
 
 /** pdfguru의 Manage Pages 모달: 썸네일 그리드 + 일괄 작업 + 드래그 순서 변경 */
 export default function ManagePagesDialog({ open, onClose }: { open: boolean; onClose: () => void }): JSX.Element {
@@ -37,21 +26,14 @@ export default function ManagePagesDialog({ open, onClose }: { open: boolean; on
   const pageDuplicate = useEditor((s) => s.pageDuplicate)
   const pageRotate = useEditor((s) => s.pageRotate)
   const pageNudge = useEditor((s) => s.pageNudge)
-  const pageImport = useEditor((s) => s.pageImport)
-  const pageImportImages = useEditor((s) => s.pageImportImages)
-  const setNotice = useEditor((s) => s.setNotice)
   const pageMoveToIndex = useEditor((s) => s.pageMoveToIndex)
   const undo = useEditor((s) => s.undo)
   const redo = useEditor((s) => s.redo)
-  const canUndo = useEditor((s) => s.history.past.length > 0 && !s.editTextSnapshot)
-  const canRedo = useEditor((s) => s.history.future.length > 0 && !s.editTextSnapshot)
+  const canUndo = useEditor(selectCanUndo)
+  const canRedo = useEditor(selectCanRedo)
+  const { inputs, openPdf, openImages } = usePageImport()
 
   const [sel, setSel] = useState<Set<string>>(new Set())
-  const [dragIdx, setDragIdx] = useState<number | null>(null)
-  const [dropIdx, setDropIdx] = useState<number | null>(null)
-  const dragRef = useRef<{ index: number; startX: number; startY: number; active: boolean; drop: number | null } | null>(null)
-  const fileRef = useRef<HTMLInputElement>(null)
-  const imageRef = useRef<HTMLInputElement>(null)
   const gridRef = useRef<HTMLDivElement>(null)
   const has = sel.size > 0
 
@@ -64,114 +46,74 @@ export default function ManagePagesDialog({ open, onClose }: { open: boolean; on
     })
   }
 
-  // 삭제된 페이지가 선택에 남지 않게 정리
-  const validSel = new Set([...sel].filter((id) => pages.some((p) => p.id === id)))
+  // 삭제된 페이지가 선택에 남지 않게 정리 (id Set 은 pages 가 바뀔 때만 다시 만든다)
+  const pageIds = useMemo(() => new Set(pages.map((p) => p.id)), [pages])
+  const validSel = useMemo(() => new Set([...sel].filter((id) => pageIds.has(id))), [sel, pageIds])
 
-  async function onImportFile(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
-    const bytes = new Uint8Array(await file.arrayBuffer())
-    await pageImport(bytes)
-  }
-
-  /** 이미지 여러 장 → 각각 1페이지로 문서 끝에 추가 (한 번의 undo 단위) */
-  async function onImportImages(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
-    const files = Array.from(e.target.files ?? [])
-    e.target.value = ''
-    if (files.length === 0) return
-    try {
-      await pageImportImages(files)
-      setNotice({ msg: t('imagePagesAdded'), severity: 'success' })
-    } catch {
-      setNotice({ msg: t('imageImportFailed'), severity: 'error' })
-    }
-  }
-
-  /** 그리드에서 포인터 위치 → 삽입점 (행 내 좌/우 절반 기준) */
-  function calcGridDrop(clientX: number, clientY: number): number {
-    const nodes = gridRef.current?.querySelectorAll('[data-mthumb]')
-    if (!nodes || nodes.length === 0) return 0
-    let idx = nodes.length
-    for (let i = 0; i < nodes.length; i++) {
-      const r = nodes[i].getBoundingClientRect()
-      if (clientY < r.top) {
-        idx = i
-        break
-      }
-      if (clientY <= r.bottom) {
-        if (clientX < r.left + r.width / 2) {
-          idx = i
-          break
-        }
-        idx = i + 1
-      }
-    }
-    return idx
-  }
-
-  function finishDrag(drop: number | null, index: number): void {
-    if (drop !== null) {
+  const { dragIdx, dropIdx, bind } = useDragReorder({
+    containerRef: gridRef,
+    itemSelector: '[data-mthumb]',
+    axis: 'grid',
+    threshold: 7,
+    onDrop: (index, drop) => {
       const dragged = pages[index]
       // 선택에 포함된 페이지를 끌면 선택 전체 이동, 아니면 그 페이지만
       const ids = validSel.has(dragged.id) ? validSel : new Set([dragged.id])
       pageMoveToIndex(ids, drop)
-    }
-    setDragIdx(null)
-    setDropIdx(null)
-  }
+    },
+    onClick: (index) => toggle(pages[index].id) // 클릭 = 선택 토글
+  })
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg" PaperProps={{ sx: { height: '86vh' } }}>
       <Stack direction="row" alignItems="center" spacing={0.5} sx={{ px: 2, py: 1, borderBottom: 1, borderColor: 'divider', flexWrap: 'wrap' }}>
-        <Button size="small" color="inherit" startIcon={<AddRounded />} onClick={() => pageInsertBlank(pages.length)}>
+        <Button size="small" color="inherit" startIcon={<Plus />} onClick={() => pageInsertBlank(pages.length)}>
           {t('newPage')}
         </Button>
-        <Button size="small" color="inherit" startIcon={<DeleteOutlineRounded />} disabled={!has} onClick={() => { pageRemove(validSel); setSel(new Set()) }}>
+        <Button size="small" color="inherit" startIcon={<Trash2 />} disabled={!has} onClick={() => { pageRemove(validSel); setSel(new Set()) }}>
           {t('delete')}
         </Button>
-        <Button size="small" color="inherit" startIcon={<ContentCopyRounded />} disabled={!has} onClick={() => pageDuplicate(validSel)}>
+        <Button size="small" color="inherit" startIcon={<Copy />} disabled={!has} onClick={() => pageDuplicate(validSel)}>
           {t('duplicate')}
         </Button>
-        <Button size="small" color="inherit" startIcon={<RotateLeftRounded />} disabled={!has} onClick={() => pageRotate(validSel, -90)}>
+        <Button size="small" color="inherit" startIcon={<RotateCcw />} disabled={!has} onClick={() => pageRotate(validSel, -90)}>
           {t('rotateLeft')}
         </Button>
-        <Button size="small" color="inherit" startIcon={<RotateRightRounded />} disabled={!has} onClick={() => pageRotate(validSel, 90)}>
+        <Button size="small" color="inherit" startIcon={<RotateCw />} disabled={!has} onClick={() => pageRotate(validSel, 90)}>
           {t('rotateRight')}
         </Button>
-        <Button size="small" color="inherit" startIcon={<ArrowBackRounded />} disabled={!has} onClick={() => pageNudge(validSel, -1)}>
+        <Button size="small" color="inherit" startIcon={<ArrowLeft />} disabled={!has} onClick={() => pageNudge(validSel, -1)}>
           {t('forward')}
         </Button>
-        <Button size="small" color="inherit" startIcon={<ArrowForwardRounded />} disabled={!has} onClick={() => pageNudge(validSel, 1)}>
+        <Button size="small" color="inherit" startIcon={<ArrowRight />} disabled={!has} onClick={() => pageNudge(validSel, 1)}>
           {t('backward')}
         </Button>
-        <Button size="small" color="inherit" startIcon={<UploadFileRounded />} onClick={() => fileRef.current?.click()}>
+        <Button size="small" color="inherit" startIcon={<FileUp />} onClick={() => openPdf()}>
           {t('importDoc')}
         </Button>
-        <Button size="small" color="inherit" startIcon={<IconImage sx={{ fontSize: 19 }} />} onClick={() => imageRef.current?.click()}>
+        <Button size="small" color="inherit" startIcon={<IconImage sx={{ fontSize: 19 }} />} onClick={() => openImages()}>
           {t('importImages')}
         </Button>
-        <input ref={fileRef} type="file" accept="application/pdf" hidden onChange={(e) => void onImportFile(e)} />
-        <input ref={imageRef} type="file" accept={IMAGE_ACCEPT} multiple hidden onChange={(e) => void onImportImages(e)} />
+        {inputs}
         <Box sx={{ flex: 1 }} />
         <Tooltip title={t('undo')}>
           <span>
             <IconButton size="small" disabled={!canUndo} onClick={() => undo()}>
-              <UndoRounded />
+              <Undo2 />
             </IconButton>
           </span>
         </Tooltip>
         <Tooltip title={t('redo')}>
           <span>
             <IconButton size="small" disabled={!canRedo} onClick={() => redo()}>
-              <RedoRounded />
+              <Redo2 />
             </IconButton>
           </span>
         </Tooltip>
-        <Button size="small" color="inherit" startIcon={<SelectAllRounded />} onClick={() => setSel(new Set(pages.map((p) => p.id)))}>
+        <Button size="small" color="inherit" startIcon={<SquareDashedMousePointer />} onClick={() => setSel(new Set(pages.map((p) => p.id)))}>
           {t('selectAll')}
         </Button>
-        <Button size="small" color="inherit" startIcon={<DeselectRounded />} disabled={!has} onClick={() => setSel(new Set())}>
+        <Button size="small" color="inherit" startIcon={<SquareDashed />} disabled={!has} onClick={() => setSel(new Set())}>
           {t('deselect')}
         </Button>
       </Stack>
@@ -190,30 +132,9 @@ export default function ManagePagesDialog({ open, onClose }: { open: boolean; on
             <Box
               key={p.id}
               data-mthumb
-              onPointerDown={(e) => {
-                if (e.button !== 0) return
-                e.preventDefault() // 드래그 중 텍스트 선택·자동 스크롤 방지
-                dragRef.current = { index: i, startX: e.clientX, startY: e.clientY, active: false, drop: null }
-                ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-              }}
-              onPointerMove={(e) => {
-                const d = dragRef.current
-                if (!d) return
-                if (!d.active && Math.hypot(e.clientX - d.startX, e.clientY - d.startY) > 7) {
-                  d.active = true
-                  setDragIdx(d.index)
-                }
-                if (d.active) {
-                  d.drop = calcGridDrop(e.clientX, e.clientY)
-                  setDropIdx(d.drop)
-                }
-              }}
-              onPointerUp={() => {
-                const d = dragRef.current
-                dragRef.current = null
-                if (d?.active) finishDrag(d.drop, d.index)
-                else toggle(p.id) // 클릭 = 선택 토글
-              }}
+              onPointerDown={(e) => bind.onPointerDown(e, i)}
+              onPointerMove={bind.onPointerMove}
+              onPointerUp={() => bind.onPointerUp(i)}
               sx={{
                 cursor: 'pointer',
                 userSelect: 'none',
@@ -227,7 +148,7 @@ export default function ManagePagesDialog({ open, onClose }: { open: boolean; on
                 variant="outlined"
                 sx={{ overflow: 'hidden', borderColor: selected ? 'secondary.main' : 'divider', borderWidth: selected ? 2.5 : 1, borderRadius: 1.5 }}
               >
-                <ThumbCanvas page={p} width={340} pageW={size.w} />
+                <ThumbCanvas page={p} width={340} pageW={size.w} pageH={size.h} />
               </Paper>
               <Typography variant="caption" display="block" textAlign="center" sx={{ mt: 0.5, bgcolor: selected ? 'secondary.main' : 'transparent', color: selected ? '#fff' : 'text.secondary', borderRadius: 1, width: 36, mx: 'auto' }}>
                 {i + 1}
@@ -237,8 +158,7 @@ export default function ManagePagesDialog({ open, onClose }: { open: boolean; on
         })}
       </Box>
 
-      <Divider />
-      <Stack direction="row" alignItems="center" sx={{ px: 2, py: 1.2 }}>
+      <DialogFooter sx={{ px: 2, py: 1.2, borderColor: 'divider' }}>
         <Button color="inherit" onClick={onClose}>
           {t('close')}
         </Button>
@@ -249,7 +169,7 @@ export default function ManagePagesDialog({ open, onClose }: { open: boolean; on
         <Button variant="contained" onClick={onClose}>
           {t('ok')}
         </Button>
-      </Stack>
+      </DialogFooter>
     </Dialog>
   )
 }

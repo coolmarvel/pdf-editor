@@ -2,13 +2,9 @@ import Box from '@mui/material/Box'
 import IconButton from '@mui/material/IconButton'
 import Typography from '@mui/material/Typography'
 import Tooltip from '@mui/material/Tooltip'
-import KeyboardArrowUpRounded from '@mui/icons-material/KeyboardArrowUpRounded'
-import KeyboardArrowDownRounded from '@mui/icons-material/KeyboardArrowDownRounded'
-import ZoomInRounded from '@mui/icons-material/ZoomInRounded'
-import ZoomOutRounded from '@mui/icons-material/ZoomOutRounded'
-import PanToolRounded from '@mui/icons-material/PanToolRounded'
 import { useEditor } from '@renderer/store/editor'
 import { useT } from '@renderer/i18n'
+import { ChevronDown, ChevronUp, Hand, ZoomIn, ZoomOut } from './icons'
 
 /** 하단 중앙 플로팅 페이저 (pdfguru의 다크 필) */
 export default function FloatingPager(): JSX.Element {
@@ -50,27 +46,27 @@ export default function FloatingPager(): JSX.Element {
     >
       <Typography sx={{ color: '#cfe0d5', mr: 1, fontSize: 15, whiteSpace: 'nowrap', flexShrink: 0 }}>{t('pageLabel')}</Typography>
       <IconButton size="small" sx={iconSx} disabled={currentPage <= 0} onClick={() => requestScrollTo(Math.max(0, currentPage - step))}>
-        <KeyboardArrowUpRounded />
+        <ChevronUp />
       </IconButton>
       <Typography sx={{ color: '#fff', mx: 0.5, fontSize: 16, whiteSpace: 'nowrap', flexShrink: 0 }} fontWeight={700}>
         {Math.min(currentPage + 1, pages.length)}/{pages.length}
       </Typography>
       <IconButton size="small" sx={iconSx} disabled={currentPage >= pages.length - 1} onClick={() => requestScrollTo(Math.min(pages.length - 1, currentPage + step))}>
-        <KeyboardArrowDownRounded />
+        <ChevronDown />
       </IconButton>
       <Tooltip title={t('zoomIn')}>
         <IconButton size="small" sx={iconSx} onClick={() => setZoom(zoom * 1.2)}>
-          <ZoomInRounded />
+          <ZoomIn />
         </IconButton>
       </Tooltip>
       <Tooltip title={t('zoomOut')}>
         <IconButton size="small" sx={iconSx} onClick={() => setZoom(zoom / 1.2)}>
-          <ZoomOutRounded />
+          <ZoomOut />
         </IconButton>
       </Tooltip>
       <Tooltip title={t('handTool')}>
         <IconButton size="small" sx={{ ...iconSx, bgcolor: tool === 'hand' ? 'rgba(255,255,255,.25)' : undefined }} onClick={() => setTool(tool === 'hand' ? 'select' : 'hand')}>
-          <PanToolRounded fontSize="small" />
+          <Hand fontSize="small" />
         </IconButton>
       </Tooltip>
     </Box>

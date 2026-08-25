@@ -11,6 +11,21 @@ import Paper from '@mui/material/Paper'
 import { PRESET_STAMPS, CUSTOM_STAMP_COLORS, renderStamp, nowStampDateTime, type StampSpec } from '@renderer/editor/stamp'
 import { useEditor } from '@renderer/store/editor'
 import { useT } from '@renderer/i18n'
+import SwatchRow from './ui/SwatchRow'
+
+/** 날짜/시간이 고정인 프리셋의 렌더 결과 캐시 — autoDateTime 프리셋 2개만 열 때마다 다시 그린다 */
+const staticPreviewCache = new Map<StampSpec, ReturnType<typeof renderStamp>>()
+function presetPreview(spec: StampSpec): ReturnType<typeof renderStamp> {
+  if (spec.autoDateTime) return renderStamp({ ...spec, ...nowStampDateTime() })
+  let img = staticPreviewCache.get(spec)
+  if (!img) {
+    img = renderStamp(spec)
+    staticPreviewCache.set(spec, img)
+  }
+  return img
+}
+
+const STAMP_COLORS = CUSTOM_STAMP_COLORS.map((cc) => cc.color)
 
 /** 스탬프 선택/제작: 프리셋 그리드 ↔ 커스텀 빌더 (pdfguru와 동일 구성) */
 export default function StampDialog({ open, onClose }: { open: boolean; onClose: () => void }): JSX.Element {
@@ -32,17 +47,8 @@ export default function StampDialog({ open, onClose }: { open: boolean; onClose:
     onClose()
   }
 
-  // 프리셋 미리보기 = 실제 렌더 결과 (실물과 100% 동일). 다이얼로그 열릴 때 1회 생성
-  const previews = useMemo(
-    () =>
-      open
-        ? PRESET_STAMPS.map((spec) => ({
-            spec,
-            img: renderStamp(spec.autoDateTime ? { ...spec, ...nowStampDateTime() } : spec)
-          }))
-        : [],
-    [open]
-  )
+  // 프리셋 미리보기 = 실제 렌더 결과 (실물과 100% 동일). 다이얼로그 열릴 때 생성 (정적 프리셋은 모듈 캐시)
+  const previews = useMemo(() => (open ? PRESET_STAMPS.map((spec) => ({ spec, img: presetPreview(spec) })) : []), [open])
 
   const now = new Date()
   const dateStr = `${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}/${String(now.getFullYear() % 100).padStart(2, '0')}`
@@ -94,12 +100,14 @@ export default function StampDialog({ open, onClose }: { open: boolean; onClose:
               <FormControlLabel control={<Checkbox checked={withDate} onChange={(e) => setWithDate(e.target.checked)} />} label={t('date')} />
               <FormControlLabel control={<Checkbox checked={withTime} onChange={(e) => setWithTime(e.target.checked)} />} label={t('time')} />
             </Stack>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <Typography variant="body2">{t('color')}</Typography>
-              {CUSTOM_STAMP_COLORS.map((cc, i) => (
-                <Box key={cc.color} onClick={() => setColorIdx(i)} sx={{ width: 24, height: 24, borderRadius: '50%', bgcolor: cc.color, cursor: 'pointer', border: i === colorIdx ? '3px solid #1f2430' : '3px solid transparent' }} />
-              ))}
-            </Stack>
+            <SwatchRow
+              colors={STAMP_COLORS}
+              value={c.color}
+              onChange={(col) => setColorIdx(STAMP_COLORS.indexOf(col))}
+              spacing={1}
+              prefix={<Typography variant="body2">{t('color')}</Typography>}
+              swatchSx={(_, sel) => ({ cursor: 'pointer', border: sel ? '3px solid #1f2430' : '3px solid transparent' })}
+            />
             <Stack direction="row" spacing={1} justifyContent="flex-end">
               <Button color="inherit" onClick={onClose}>
                 {t('cancel')}

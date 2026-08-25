@@ -5,6 +5,9 @@
  * mode 'export': 링크/노트는 그리지 않는다 — 저장 시 실제 PDF 주석(Annot)으로 들어가기 때문.
  */
 import type { PageObject, TextObj, EditTextObj, StrokeObj, ShapeObj, WatermarkObj, Rect, BlendMode } from '@core/objects'
+import { cachedImage } from './canvasUtil'
+
+export { preloadImage, clearImageCache } from './canvasUtil'
 
 /**
  * 객체의 실효 혼합 모드. 'normal' 이 아니면 백드롭(페이지 픽셀) 위에서 합성해야
@@ -67,6 +70,22 @@ function textCssFont(size: number, family: string, bold: boolean, italic: boolea
   return `${italic ? 'italic ' : ''}${bold ? 'bold ' : ''}${Math.max(6, size * H)}px ${fontCss(family)}`
 }
 
+/**
+ * 줄별 실측 폭 캐시. 객체는 불변(수정 = 새 객체)이라 WeakMap 이 스스로 무효화되고,
+ * 폰트 px 는 캔버스 높이(H)에 따라 달라지므로 H 가 바뀌면 다시 잰다.
+ * (드래그 중 매 프레임 전체 텍스트를 재측정하던 비용 제거)
+ */
+const textMeasureCache = new WeakMap<TextObj, { H: number; lines: string[]; widths: number[] }>()
+
+function measureLines(ctx: CanvasRenderingContext2D, t: TextObj, H: number): { lines: string[]; widths: number[] } {
+  const hit = textMeasureCache.get(t)
+  if (hit && hit.H === H) return hit
+  const lines = t.text.split('\n')
+  const entry = { H, lines, widths: lines.map((l) => ctx.measureText(l).width) }
+  textMeasureCache.set(t, entry)
+  return entry
+}
+
 export function drawTextObj(ctx: CanvasRenderingContext2D, t: TextObj, W: number, H: number): void {
   ctx.save()
   ctx.globalAlpha = t.opacity
@@ -74,10 +93,10 @@ export function drawTextObj(ctx: CanvasRenderingContext2D, t: TextObj, W: number
   ctx.textBaseline = 'top'
   const px = Math.max(6, t.size * H)
   const lh = px * 1.25
-  const lines = t.text.split('\n')
+  const { lines, widths } = measureLines(ctx, t, H)
   // textBoxRect(선택 외곽선·히트테스트)와 같은 기준: 실측 폭 + 명시 높이(없으면 내용 높이)
   const blockH = lh * lines.length
-  const boxW = Math.max(t.w * W, Math.max(...lines.map((l) => ctx.measureText(l).width), 1))
+  const boxW = Math.max(t.w * W, Math.max(...widths, 1))
   const boxH = t.h > 0 ? Math.max(t.h * H, blockH) : blockH
   const rot = t.rotation ?? 0
   if (rot !== 0) {
@@ -102,7 +121,7 @@ export function drawTextObj(ctx: CanvasRenderingContext2D, t: TextObj, W: number
   const halfLeading = (lh - px) / 2
   lines.forEach((line, i) => {
     let x = t.x * W
-    const lw = ctx.measureText(line).width
+    const lw = widths[i]
     if (t.align === 'center') x += (boxW - lw) / 2
     else if (t.align === 'right') x += boxW - lw
     const y = t.y * H + offY + i * lh + halfLeading
@@ -120,8 +139,9 @@ let measureCtx: CanvasRenderingContext2D | null = null
 export function measureTextWidthPx(text: string, size: number, font: string, bold: boolean, italic: boolean, H: number): number {
   if (!measureCtx) measureCtx = document.createElement('canvas').getContext('2d')!
   measureCtx.font = textCssFont(size, font, bold, italic, H)
-  const lines = text.split('\n')
-  return Math.max(...lines.map((l) => measureCtx!.measureText(l).width), 1)
+  let max = 1
+  for (const l of text.split('\n')) max = Math.max(max, measureCtx.measureText(l).width)
+  return max
 }
 
 function drawEditText(ctx: CanvasRenderingContext2D, t: EditTextObj, W: number, H: number): void {
@@ -192,25 +212,10 @@ function drawShape(ctx: CanvasRenderingContext2D, sh: ShapeObj, W: number, H: nu
   ctx.globalAlpha = 1
 }
 
-const imgCache = new Map<string, HTMLImageElement>()
-
-/** dataUrl 이미지를 미리 로드(오버레이 렌더는 동기라서 사전 로드 필요) */
-export function preloadImage(dataUrl: string): Promise<HTMLImageElement> {
-  const hit = imgCache.get(dataUrl)
-  if (hit && hit.complete) return Promise.resolve(hit)
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.onload = () => resolve(img)
-    img.onerror = reject
-    img.src = dataUrl
-    imgCache.set(dataUrl, img)
-  })
-}
-
 /** 워터마크: rect = 중앙 셀. single 은 그 자리에 1개, tile 은 벽돌 패턴으로 페이지 전체 반복 */
 function drawWatermark(ctx: CanvasRenderingContext2D, wm: WatermarkObj, W: number, H: number): void {
-  const img = imgCache.get(wm.dataUrl)
-  if (!img || !img.complete) return
+  const img = cachedImage(wm.dataUrl)
+  if (!img) return
   const w = wm.rect.w * W
   const h = wm.rect.h * H
   if (w <= 0 || h <= 0) return
@@ -266,7 +271,7 @@ export type DrawMode = 'editor' | 'export'
 
 /**
  * 페이지의 객체들을 캔버스에 그린다. W,H = 캔버스 픽셀 크기.
- * 이미지 객체는 preloadImage 로 캐시에 올라와 있어야 그려진다(없으면 건너뜀).
+ * 이미지 객체는 preloadImage 로 캐시에 올라와 있어야 그려진다(없으면 건너뜀). 캐시 자체는 canvasUtil.
  */
 export function drawObjects(ctx: CanvasRenderingContext2D, objects: PageObject[], W: number, H: number, mode: DrawMode): void {
   ctx.save()
@@ -285,8 +290,8 @@ export function drawObjects(ctx: CanvasRenderingContext2D, objects: PageObject[]
         drawShape(ctx, o, W, H)
         break
       case 'image': {
-        const img = imgCache.get(o.dataUrl)
-        if (img && img.complete) {
+        const img = cachedImage(o.dataUrl)
+        if (img) {
           ctx.globalAlpha = o.opacity
           ctx.drawImage(img, o.rect.x * W, o.rect.y * H, o.rect.w * W, o.rect.h * H)
           ctx.globalAlpha = 1

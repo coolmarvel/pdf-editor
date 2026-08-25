@@ -21,7 +21,7 @@ export interface PageRef {
 }
 
 let pseq = 0
-export function newPageId(): string {
+function newPageId(): string {
   return `pg-${++pseq}-${Math.random().toString(36).slice(2, 8)}`
 }
 
@@ -60,17 +60,6 @@ export function rotatePages(pages: PageRef[], ids: Set<string>, delta: 90 | -90)
   return pages.map((p) => (ids.has(p.id) ? { ...p, extraRotation: addRotation(p.extraRotation, delta) } : p))
 }
 
-/** 선택 페이지 묶음을 순서 유지한 채 target 페이지 앞(before) 또는 뒤(after)로 이동 */
-export function movePages(pages: PageRef[], ids: Set<string>, targetId: string, where: 'before' | 'after'): PageRef[] {
-  if (ids.has(targetId)) return pages
-  const moving = pages.filter((p) => ids.has(p.id))
-  const rest = pages.filter((p) => !ids.has(p.id))
-  const ti = rest.findIndex((p) => p.id === targetId)
-  if (ti < 0) return pages
-  const at = where === 'before' ? ti : ti + 1
-  return [...rest.slice(0, at), ...moving, ...rest.slice(at)]
-}
-
 /** 선택 페이지들을 한 칸 앞/뒤로 (Move Before/After 버튼) */
 export function nudgePages(pages: PageRef[], ids: Set<string>, dir: -1 | 1): PageRef[] {
   const arr = [...pages]
@@ -88,11 +77,6 @@ export function nudgePages(pages: PageRef[], ids: Set<string>, dir: -1 | 1): Pag
     }
   }
   return arr
-}
-
-/** 다른 문서의 페이지들을 끝에 추가 (Import Document) */
-export function appendDocument(pages: PageRef[], docId: string, pageCount: number): PageRef[] {
-  return insertDocument(pages, docId, pageCount, pages.length)
 }
 
 /** 다른 문서의 페이지들을 index 위치 앞에 삽입 (사이드바 + 버튼의 "PDF 업로드") */

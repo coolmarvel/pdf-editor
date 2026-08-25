@@ -3,6 +3,7 @@
  * 언어는 랜딩 화면에서 선택, localStorage('lang') 에 유지.
  * 사용: const t = useT()  →  t('done')
  */
+import { useCallback } from 'react'
 import { useEditor } from '@renderer/store/editor'
 
 export type Lang = 'ko' | 'en'
@@ -93,8 +94,6 @@ const ko = {
   addPage: '페이지 추가',
   uploadPdf: 'PDF 업로드',
   uploadImage: '이미지 업로드',
-  pageActions: '페이지 메뉴',
-  extracted: '페이지를 추출했습니다.',
   // 페이지 관리 다이얼로그
   newPage: '새 페이지',
   importDoc: '문서 가져오기',
@@ -109,8 +108,6 @@ const ko = {
   // 컨텍스트 바 공통
   textColor: '글자색',
   bgColor: '글자 배경색',
-  bg: '배경',
-  fill: '채우기',
   fillColor: '채우기 색',
   strokeColor: '선 색',
   borderColor: '테두리 색',
@@ -127,12 +124,7 @@ const ko = {
   alignMiddle: '세로 가운데 정렬',
   alignBottom: '아래 정렬',
   deleteSelected: '선택한 객체 삭제 (Delete)',
-  hintAddText: '페이지를 클릭해 텍스트를 입력하세요',
-  hintEditText: '페이지의 텍스트를 클릭하면 수정할 수 있습니다',
-  hintEraser: '드래그한 영역을 덮어서 지웁니다',
   hintEraseDrawing: '연필·형광펜 선을 클릭하거나 문질러 지웁니다',
-  hintShapeDrag: '드래그해서 그리기',
-  hintShapeClick: '클릭한 위치에 표시',
   hintNote: '페이지를 클릭하면 노트가 붙습니다',
   hintLink: '링크를 걸 영역을 드래그하세요',
   thickness: '굵기',
@@ -164,13 +156,10 @@ const ko = {
   typing: '타이핑',
   signHere: '여기에 서명하세요',
   chooseImage: '이미지 선택',
-  chooseSignImage: '서명 이미지를 선택하세요',
   selectOrDragImage: '이미지 선택 또는 드래그',
   clearSignature: '서명 지우기',
-  namePlaceholder: '이름 입력',
   savedSigns: '저장된 서명:',
   saveSign: '서명 저장',
-  clear: '지우기',
   // 워터마크
   watermark: '워터마크',
   wmText: '텍스트',
@@ -186,8 +175,7 @@ const ko = {
   wmCurrentPage: '현재 페이지',
   wmApply: '적용',
   wmRemoveAll: '모두 제거',
-  wmChooseImage: '이미지 선택',
-  hintWatermark: '문구나 이미지를 정하고 적용을 누르세요'
+  wmChooseImage: '이미지 선택'
 }
 
 const en: Record<keyof typeof ko, string> = {
@@ -268,8 +256,6 @@ const en: Record<keyof typeof ko, string> = {
   addPage: 'Add page',
   uploadPdf: 'Upload PDF',
   uploadImage: 'Upload image',
-  pageActions: 'Page menu',
-  extracted: 'Page extracted.',
   newPage: 'New Page',
   importDoc: 'Import Document',
   importImages: 'Import Images',
@@ -282,8 +268,6 @@ const en: Record<keyof typeof ko, string> = {
   dragToReorder: 'Drag thumbnails to reorder pages',
   textColor: 'Text color',
   bgColor: 'Text background',
-  bg: 'BG',
-  fill: 'Fill',
   fillColor: 'Fill color',
   strokeColor: 'Line color',
   borderColor: 'Border color',
@@ -300,12 +284,7 @@ const en: Record<keyof typeof ko, string> = {
   alignMiddle: 'Align middle',
   alignBottom: 'Align bottom',
   deleteSelected: 'Delete selected (Delete)',
-  hintAddText: 'Click on the page to type text',
-  hintEditText: 'Click text on the page to edit it',
-  hintEraser: 'Drag to cover and erase the area',
   hintEraseDrawing: 'Click or rub pencil & highlight strokes to erase',
-  hintShapeDrag: 'Drag to draw',
-  hintShapeClick: 'Click to place',
   hintNote: 'Click on the page to attach a note',
   hintLink: 'Drag over the area to link',
   thickness: 'Width',
@@ -333,13 +312,10 @@ const en: Record<keyof typeof ko, string> = {
   typing: 'Type',
   signHere: 'Sign here',
   chooseImage: 'Choose image',
-  chooseSignImage: 'Choose a signature image',
   selectOrDragImage: 'Select or Drag Image',
   clearSignature: 'Clear signature',
-  namePlaceholder: 'Type your name',
   savedSigns: 'Saved signatures:',
   saveSign: 'Save signature',
-  clear: 'Clear',
   watermark: 'Watermark',
   wmText: 'Text',
   wmImage: 'Image',
@@ -354,8 +330,7 @@ const en: Record<keyof typeof ko, string> = {
   wmCurrentPage: 'Current page',
   wmApply: 'Apply',
   wmRemoveAll: 'Remove all',
-  wmChooseImage: 'Choose image',
-  hintWatermark: 'Set text or image, then press Apply'
+  wmChooseImage: 'Choose image'
 }
 
 export type I18nKey = keyof typeof ko
@@ -363,10 +338,6 @@ const DICTS: Record<Lang, Record<I18nKey, string>> = { ko, en }
 
 export function useT(): (k: I18nKey) => string {
   const lang = useEditor((s) => s.lang)
-  return (k) => DICTS[lang][k] ?? ko[k] ?? k
-}
-
-/** 컴포넌트 밖(스토어 등)에서 쓰는 버전 */
-export function tOf(lang: Lang, k: I18nKey): string {
-  return DICTS[lang][k] ?? ko[k] ?? k
+  // 언어가 같으면 같은 함수 — t 를 prop 으로 받는 자식이 memo 될 수 있게
+  return useCallback((k: I18nKey) => DICTS[lang][k] ?? ko[k] ?? k, [lang])
 }

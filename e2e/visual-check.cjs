@@ -2,7 +2,7 @@
 const path = require('path')
 const fs = require('fs')
 
-const ROOT = '/home/jace/pdf-editor'
+const ROOT = path.join(__dirname, '..')
 const OUT = process.env.E2E_OUT ?? __dirname
 const { _electron } = require(path.join(ROOT, 'node_modules', 'playwright-core'))
 const { PDFDocument, StandardFonts } = require(path.join(ROOT, 'node_modules', 'pdf-lib'))
@@ -136,7 +136,7 @@ async function main() {
   await win.mouse.up()
   await win.waitForTimeout(300)
   await win.screenshot({ path: path.join(OUT, '08-taller-box.png'), clip: { x: cx - 160, y: cy - 110, width: 340, height: 280 } })
-  await win.click('[data-testid="VerticalAlignCenterRoundedIcon"]')
+  await win.click('[data-testid="AlignVerticalJustifyCenterIcon"]')
   await win.waitForTimeout(300)
   await win.screenshot({ path: path.join(OUT, '09-vcenter.png'), clip: { x: cx - 160, y: cy - 110, width: 340, height: 280 } })
   const gaps2 = await win.evaluate(() => {

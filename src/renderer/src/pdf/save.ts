@@ -13,6 +13,7 @@ import type { PageRef } from '@core/pages'
 import type { PageObject, LinkObj, NoteObj } from '@core/objects'
 import { getDocBytes, renderPage } from './docs'
 import { drawObjects, preloadImage, effectiveBlend } from '@renderer/editor/draw'
+import { makeCanvas, releaseCanvas, canvasBytes, imageUrlsOf } from '@renderer/editor/canvasUtil'
 
 /** 오버레이 굽기 해상도 (pt → px 배율). 2.5 ≈ 180dpi */
 const BURN_SCALE = 2.5
@@ -31,52 +32,51 @@ function hexToRgb(hex: string): [number, number, number] {
   return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]
 }
 
-async function burnOverlayPng(objects: PageObject[], dw: number, dh: number, ref: PageRef): Promise<string | null> {
+/** 오버레이 PNG 바이트 (그릴 객체가 없으면 null). 임시 캔버스는 뽑는 즉시 비운다 — 저장 중 페이지 수만큼 쌓이지 않게 */
+async function burnOverlayPng(objects: PageObject[], dw: number, dh: number, ref: PageRef): Promise<Uint8Array | null> {
   const drawable = objects.filter((o) => o.type !== 'link' && o.type !== 'note')
   if (drawable.length === 0) return null
   // 이미지 객체 사전 로드
-  await Promise.all(
-    drawable.filter((o) => o.type === 'image' || o.type === 'watermark').map((o) => preloadImage((o as { dataUrl: string }).dataUrl))
-  )
-  const canvas = document.createElement('canvas')
+  await Promise.all(imageUrlsOf(drawable).map(preloadImage))
   const scale = Math.min(BURN_SCALE, 4000 / Math.max(dw, dh))
   const W = Math.round(dw * scale)
   const H = Math.round(dh * scale)
-  canvas.width = W
-  canvas.height = H
-  const ctx = canvas.getContext('2d')!
+  const { canvas, ctx } = makeCanvas(W, H)
+  const temps: HTMLCanvasElement[] = [canvas]
+  try {
+    const blended = drawable.some((o) => effectiveBlend(o) !== 'normal')
+    if (!blended) {
+      drawObjects(ctx, drawable, W, H, 'export')
+      return await canvasBytes(canvas, 'image/png')
+    }
 
-  const blended = drawable.some((o) => effectiveBlend(o) !== 'normal')
-  if (!blended) {
+    // ── 혼합 모드가 있으면 페이지 래스터를 백드롭으로 깔고 블렌드한 뒤,
+    //    객체가 덮는 영역만 남긴다(destination-in) — 그 조각을 원본 벡터 위에 얹으면
+    //    화면과 동일한 블렌드 결과가 되고 나머지 영역은 벡터가 유지된다.
+    const pageCanvas = document.createElement('canvas')
+    temps.push(pageCanvas)
+    await renderPage(ref, pageCanvas, scale)
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, W, H)
+    ctx.drawImage(pageCanvas, 0, 0, W, H)
     drawObjects(ctx, drawable, W, H, 'export')
-    return canvas.toDataURL('image/png')
+    // 커버리지 마스크 (반투명 객체도 완전히 남도록 알파 증폭 — 굽힌 픽셀에 이미 혼합 결과가 들어있음)
+    const { canvas: mask, ctx: mctx } = makeCanvas(W, H)
+    temps.push(mask)
+    drawObjects(mctx, drawable, W, H, 'export')
+    const mi = mctx.getImageData(0, 0, W, H)
+    for (let i = 3; i < mi.data.length; i += 4) {
+      const a = mi.data[i]
+      if (a > 0) mi.data[i] = Math.min(255, a * 3)
+    }
+    mctx.putImageData(mi, 0, 0)
+    ctx.globalCompositeOperation = 'destination-in'
+    ctx.drawImage(mask, 0, 0)
+    ctx.globalCompositeOperation = 'source-over'
+    return await canvasBytes(canvas, 'image/png')
+  } finally {
+    temps.forEach(releaseCanvas)
   }
-
-  // ── 혼합 모드가 있으면 페이지 래스터를 백드롭으로 깔고 블렌드한 뒤,
-  //    객체가 덮는 영역만 남긴다(destination-in) — 그 조각을 원본 벡터 위에 얹으면
-  //    화면과 동일한 블렌드 결과가 되고 나머지 영역은 벡터가 유지된다.
-  const pageCanvas = document.createElement('canvas')
-  await renderPage(ref, pageCanvas, scale)
-  ctx.fillStyle = '#ffffff'
-  ctx.fillRect(0, 0, W, H)
-  ctx.drawImage(pageCanvas, 0, 0, W, H)
-  drawObjects(ctx, drawable, W, H, 'export')
-  // 커버리지 마스크 (반투명 객체도 완전히 남도록 알파 증폭 — 굽힌 픽셀에 이미 혼합 결과가 들어있음)
-  const mask = document.createElement('canvas')
-  mask.width = W
-  mask.height = H
-  const mctx = mask.getContext('2d')!
-  drawObjects(mctx, drawable, W, H, 'export')
-  const mi = mctx.getImageData(0, 0, W, H)
-  for (let i = 3; i < mi.data.length; i += 4) {
-    const a = mi.data[i]
-    if (a > 0) mi.data[i] = Math.min(255, a * 3)
-  }
-  mctx.putImageData(mi, 0, 0)
-  ctx.globalCompositeOperation = 'destination-in'
-  ctx.drawImage(mask, 0, 0)
-  ctx.globalCompositeOperation = 'source-over'
-  return canvas.toDataURL('image/png')
 }
 
 /** embedPage를 표시 방향에 맞게 회전해 얹는다. R = (소스회전 + 추가회전) % 360 */
@@ -107,6 +107,8 @@ function drawEmbeddedRotated(
 export async function buildPdf(input: SaveInput): Promise<Uint8Array> {
   const out = await PDFDocument.create()
   const srcCache = new Map<string, PDFDocument>()
+  /** 같은 원본 페이지(복제 등)는 XObject 를 한 번만 임베드한다 — 출력 크기·시간 모두 절약 */
+  const embedCache = new Map<string, Awaited<ReturnType<PDFDocument['embedPage']>>>()
 
   async function srcDoc(docId: string): Promise<PDFDocument> {
     let d = srcCache.get(docId)
@@ -132,7 +134,12 @@ export async function buildPdf(input: SaveInput): Promise<Uint8Array> {
       const src = await srcDoc(ref.docId)
       const srcPage = src.getPage(ref.pageIndex)
       const srcRotate = srcPage.getRotation().angle
-      const embedded = await out.embedPage(srcPage)
+      const key = `${ref.docId}:${ref.pageIndex}`
+      let embedded = embedCache.get(key)
+      if (!embedded) {
+        embedded = await out.embedPage(srcPage)
+        embedCache.set(key, embedded)
+      }
       drawEmbeddedRotated(page, embedded, srcRotate + ref.extraRotation, dw, dh)
     }
 

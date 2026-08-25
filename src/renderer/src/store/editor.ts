@@ -12,7 +12,6 @@ import {
   removePages,
   duplicatePages,
   rotatePages,
-  movePages,
   movePagesToIndex,
   nudgePages,
   insertDocument
@@ -175,7 +174,6 @@ interface EditorState {
 
   openDocument(name: string, bytes: Uint8Array, onProgress?: (p: number) => void): Promise<void>
   closeDocument(): void
-  setPhase(p: Phase): void
   setFileName(n: string): void
   setNotice(n: EditorState['notice']): void
   setTool(t: Tool): void
@@ -217,8 +215,6 @@ interface EditorState {
 
   undo(): void
   redo(): void
-  canUndo(): boolean
-  canRedo(): boolean
 
   addObject(pageId: string, obj: PageObject): void
   /** 히스토리 없이 추가 — 입력 중 임시 객체(확정 시 addObject 로 한 단계만 쌓기 위함) */
@@ -229,12 +225,13 @@ interface EditorState {
   removeObject(pageId: string, id: ObjectId): void
   /** 히스토리 없이 제거 — 임시 객체 취소용 */
   removeObjectTransient(pageId: string, id: ObjectId): void
+  /** 페이지 객체 배열 통째 교체 — 히스토리 없음, set 1회 (지우개처럼 한 이벤트에 여러 객체가 바뀔 때 일괄 반영) */
+  replaceObjects(pageId: string, next: PageObject[]): void
 
   pageInsertBlank(index: number): void
   pageRemove(ids: Set<string>): void
   pageDuplicate(ids: Set<string>): void
   pageRotate(ids: Set<string>, delta: 90 | -90): void
-  pageMove(ids: Set<string>, targetId: string, where: 'before' | 'after'): void
   pageNudge(ids: Set<string>, dir: -1 | 1): void
   /** PDF 가져오기. index 지정 시 그 위치 앞에 삽입, 없으면 끝에 */
   pageImport(bytes: Uint8Array, index?: number): Promise<void>
@@ -293,6 +290,15 @@ function pruneUntouched(objectsByPage: Record<string, PageObject[]>): Record<str
   return out
 }
 
+/** 배열에서 id 가 일치하는 객체 하나에 patch 를 덮어쓴 새 배열 */
+function patchIn(list: PageObject[], id: ObjectId, patch: Partial<PageObject>): PageObject[] {
+  return list.map((o) => (o.id === id ? ({ ...o, ...patch } as PageObject) : o))
+}
+
+/** undo/redo 가능 여부 셀렉터 — 텍스트 수정 세션 중엔 히스토리가 얼어 둘 다 false (Toolbar·ManagePagesDialog 공용) */
+export const selectCanUndo = (s: EditorState): boolean => s.history.past.length > 0 && !s.editTextSnapshot
+export const selectCanRedo = (s: EditorState): boolean => s.history.future.length > 0 && !s.editTextSnapshot
+
 /** 두 objectsByPage 가 실질적으로 다른가 (페이지 배열 원소 identity 비교) */
 function objectsChanged(a: Record<string, PageObject[]>, b: Record<string, PageObject[]>): boolean {
   const keys = new Set([...Object.keys(a), ...Object.keys(b)])
@@ -314,6 +320,32 @@ export const useEditor = create<EditorState>()((set, get) => {
       return
     }
     set({ history: push(s.history, snap(s)), ...patch })
+  }
+
+  /** 한 페이지의 객체 배열만 fn 으로 바꿔 반영. history=false 면 히스토리 없이(드래그 중간·임시 객체) */
+  function editPage(
+    pageId: string,
+    fn: (list: PageObject[]) => PageObject[],
+    opts: { history: boolean; clearSelection?: boolean }
+  ): void {
+    const s = get()
+    const patch: Partial<EditorState> = { objectsByPage: { ...s.objectsByPage, [pageId]: fn(s.objectsByPage[pageId] ?? []) } }
+    if (opts.clearSelection) patch.selected = null
+    if (opts.history) commit(patch)
+    else set(patch)
+  }
+
+  /** 페이지 배열만 바꾸는 연산(삭제·이동 등)을 한 커밋으로 */
+  function pageOp(fn: (pages: PageRef[]) => PageRef[]): void {
+    commit({ pages: fn(get().pages) })
+  }
+
+  /** undo/redo 공통: 텍스트 수정 세션 중엔 비활성 (Guru 동작 — 종료 시 저장/취소로 처리) */
+  function step(apply: typeof hUndo): void {
+    const s = get()
+    if (s.editTextSnapshot) return
+    const r = apply(s.history, snap(s))
+    if (r) set({ ...r[0], history: r[1], selected: null })
   }
 
   return {
@@ -402,7 +434,6 @@ export const useEditor = create<EditorState>()((set, get) => {
       })
     },
 
-    setPhase: (phase) => set({ phase }),
     setFileName: (fileName) => set({ fileName }),
     setNotice: (notice) => set({ notice }),
     setTool(tool) {
@@ -552,84 +583,27 @@ export const useEditor = create<EditorState>()((set, get) => {
     setPageMode: (pageMode) => set({ pageMode, zoom: 0, fitMode: 'width' }), // 모드 바뀌면 폭 기준 재-fit
     setPageTransition: (pageTransition) => set({ pageTransition }),
     requestFit: () => set({ zoom: 0, fitMode: 'page' }), // "화면에 맞춤" = 페이지 전체가 보이게
-    pageMoveToIndex(ids, index) {
-      const s = get()
-      commit({ pages: movePagesToIndex(s.pages, ids, index) })
-    },
+    pageMoveToIndex: (ids, index) => pageOp((p) => movePagesToIndex(p, ids, index)),
 
-    undo() {
-      const s = get()
-      if (s.editTextSnapshot) return // 세션 중엔 비활성 (Guru 동작 — 종료 시 저장/취소로 처리)
-      const r = hUndo(s.history, snap(s))
-      if (r) set({ ...r[0], history: r[1], selected: null })
-    },
-    redo() {
-      const s = get()
-      if (s.editTextSnapshot) return
-      const r = hRedo(s.history, snap(s))
-      if (r) set({ ...r[0], history: r[1], selected: null })
-    },
-    canUndo: () => get().history.past.length > 0 && !get().editTextSnapshot,
-    canRedo: () => get().history.future.length > 0 && !get().editTextSnapshot,
+    undo: () => step(hUndo),
+    redo: () => step(hRedo),
 
-    addObject(pageId, obj) {
-      const s = get()
-      commit({
-        objectsByPage: { ...s.objectsByPage, [pageId]: [...(s.objectsByPage[pageId] ?? []), obj] }
-      })
-    },
-
-    addObjectTransient(pageId, obj) {
-      const s = get()
-      set({
-        objectsByPage: { ...s.objectsByPage, [pageId]: [...(s.objectsByPage[pageId] ?? []), obj] }
-      })
-    },
-
-    updateObject(pageId, id, patch) {
-      const s = get()
-      const list = s.objectsByPage[pageId] ?? []
-      commit({
-        objectsByPage: {
-          ...s.objectsByPage,
-          [pageId]: list.map((o) => (o.id === id ? ({ ...o, ...patch } as PageObject) : o))
-        }
-      })
-    },
-
-    updateObjectTransient(pageId, id, patch) {
-      const s = get()
-      const list = s.objectsByPage[pageId] ?? []
-      set({
-        objectsByPage: {
-          ...s.objectsByPage,
-          [pageId]: list.map((o) => (o.id === id ? ({ ...o, ...patch } as PageObject) : o))
-        }
-      })
-    },
-
+    addObject: (pageId, obj) => editPage(pageId, (l) => [...l, obj], { history: true }),
+    addObjectTransient: (pageId, obj) => editPage(pageId, (l) => [...l, obj], { history: false }),
+    updateObject: (pageId, id, patch) => editPage(pageId, (l) => patchIn(l, id, patch), { history: true }),
+    updateObjectTransient: (pageId, id, patch) => editPage(pageId, (l) => patchIn(l, id, patch), { history: false }),
     removeObject(pageId, id) {
       const s = get()
-      const list = s.objectsByPage[pageId] ?? []
       // 세션 중 editText 삭제는 확인 후 "지우기"(cover 만 남김) — Guru 동작
-      if (s.editTextSnapshot && list.find((o) => o.id === id)?.type === 'editText') {
+      if (s.editTextSnapshot && (s.objectsByPage[pageId] ?? []).find((o) => o.id === id)?.type === 'editText') {
         set({ deletePrompt: { pageId, objectId: id } })
         return
       }
-      commit({
-        objectsByPage: { ...s.objectsByPage, [pageId]: list.filter((o) => o.id !== id) },
-        selected: null
-      })
+      editPage(pageId, (l) => l.filter((o) => o.id !== id), { history: true, clearSelection: true })
     },
-
-    removeObjectTransient(pageId, id) {
-      const s = get()
-      const list = s.objectsByPage[pageId] ?? []
-      set({
-        objectsByPage: { ...s.objectsByPage, [pageId]: list.filter((o) => o.id !== id) },
-        selected: null
-      })
-    },
+    removeObjectTransient: (pageId, id) =>
+      editPage(pageId, (l) => l.filter((o) => o.id !== id), { history: false, clearSelection: true }),
+    replaceObjects: (pageId, next) => editPage(pageId, () => next, { history: false }),
 
     pageInsertBlank(index) {
       const s = get()
@@ -641,10 +615,7 @@ export const useEditor = create<EditorState>()((set, get) => {
       })
     },
 
-    pageRemove(ids) {
-      const s = get()
-      commit({ pages: removePages(s.pages, ids) })
-    },
+    pageRemove: (ids) => pageOp((p) => removePages(p, ids)),
 
     pageDuplicate(ids) {
       const s = get()
@@ -680,15 +651,7 @@ export const useEditor = create<EditorState>()((set, get) => {
       commit({ pages, objectsByPage, displaySizes })
     },
 
-    pageMove(ids, targetId, where) {
-      const s = get()
-      commit({ pages: movePages(s.pages, ids, targetId, where) })
-    },
-
-    pageNudge(ids, dir) {
-      const s = get()
-      commit({ pages: nudgePages(s.pages, ids, dir) })
-    },
+    pageNudge: (ids, dir) => pageOp((p) => nudgePages(p, ids, dir)),
 
     async pageImport(bytes, index) {
       const { docId, pageCount } = await registerDoc(bytes)

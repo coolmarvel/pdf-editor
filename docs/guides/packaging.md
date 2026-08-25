@@ -50,7 +50,7 @@ Electron Builder 표준 명칭인 `x64` 파일명으로 통일한다. 새 버전
 - App ID: `seonghyunlee.pdfeditor` (`package.json`의 전역 `build.appId`)
 - Windows 표시 이름과 설치 바로가기 이름은 한글 `PDF 편집기`를 유지한다.
 
-2026-07-09 이전 Windows 설치본은 예전 appId(`xyz.chungmu.pdfeditor`)로 만들어졌을 수 있다. 새 인스톨러는
+2026-07-09 이전 Windows 설치본은 예전 appId 로 만들어졌을 수 있다. 새 인스톨러는
 `seonghyunlee.pdfeditor`를 쓰므로, 첫 Windows 실물 테스트에서 기존 설치본 업그레이드/제거 동작을 확인한다.
 
 ## macOS

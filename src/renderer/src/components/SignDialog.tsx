@@ -11,11 +11,13 @@ import FormControlLabel from '@mui/material/FormControlLabel'
 import Radio from '@mui/material/Radio'
 import Paper from '@mui/material/Paper'
 import IconButton from '@mui/material/IconButton'
-import DeleteOutlineRounded from '@mui/icons-material/DeleteOutlineRounded'
 import { useEditor } from '@renderer/store/editor'
 import { useT } from '@renderer/i18n'
 import { renderTypedSign, fileToDataUrl, SIGN_FONTS } from '@renderer/editor/stamp'
 import { ui } from '@renderer/theme'
+import { Trash2 } from './icons'
+import SwatchRow from './ui/SwatchRow'
+import { DialogFooter, DialogHeader } from './ui/DialogBars'
 
 const INK_COLORS = ['#111111', '#1e99f5', '#5742ea']
 // 우리 브랜드 라이트 스킨 (Guru 캡처는 다크모드였음 — 2026-07-10 피드백으로 흰/빨강 전환)
@@ -178,12 +180,14 @@ export default function SignDialog({ open, onClose }: { open: boolean; onClose: 
     >
       {mode === 'library' ? (
         <Box sx={{ minHeight: 400, display: 'flex', flexDirection: 'column' }}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ px: 3, py: 2, borderBottom: `1px solid ${DIVIDER}` }}>
-            <Typography sx={{ fontSize: 18, fontWeight: 700 }}>{t('signatures')}</Typography>
-            <Button variant="contained" onClick={() => { resetDraft(); setMode('add') }} sx={primaryButtonSx}>
-              {t('addSign')}
-            </Button>
-          </Stack>
+          <DialogHeader
+            title={t('signatures')}
+            action={
+              <Button variant="contained" onClick={() => { resetDraft(); setMode('add') }} sx={primaryButtonSx}>
+                {t('addSign')}
+              </Button>
+            }
+          />
 
           <Box sx={{ flex: 1, bgcolor: ui.gray[50], p: 3 }}>
             <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(200px, 1fr))', gap: 2 }}>
@@ -228,7 +232,7 @@ export default function SignDialog({ open, onClose }: { open: boolean; onClose: 
                       '&:hover': { bgcolor: ui.brand[50], color: ui.brand[600], borderColor: ui.brand[500] }
                     }}
                   >
-                    <DeleteOutlineRounded fontSize="small" />
+                    <Trash2 fontSize="small" />
                   </IconButton>
                   <img src={s} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }} />
                 </Paper>
@@ -236,17 +240,15 @@ export default function SignDialog({ open, onClose }: { open: boolean; onClose: 
             </Box>
           </Box>
 
-          <Stack direction="row" justifyContent="flex-end" sx={{ px: 3, py: 1.8, borderTop: `1px solid ${DIVIDER}` }}>
+          <DialogFooter sx={{ justifyContent: 'flex-end' }}>
             <Button color="inherit" onClick={closeDialog} sx={secondaryButtonSx}>
               {t('cancel')}
             </Button>
-          </Stack>
+          </DialogFooter>
         </Box>
       ) : (
         <Box sx={{ minHeight: 480, display: 'flex', flexDirection: 'column' }}>
-          <Box sx={{ px: 3, py: 2, borderBottom: `1px solid ${DIVIDER}` }}>
-            <Typography sx={{ fontSize: 18, fontWeight: 700 }}>{t('addSign')}</Typography>
-          </Box>
+          <DialogHeader title={t('addSign')} />
 
           <Tabs
             value={tab}
@@ -270,7 +272,17 @@ export default function SignDialog({ open, onClose }: { open: boolean; onClose: 
           </Tabs>
 
           <Box sx={{ flex: 1, bgcolor: ui.gray[50], px: 3, py: 2, overflowY: 'auto' }}>
-            {showInk && <InkSwatches color={color} setColor={setColor} />}
+            {showInk && (
+              <SwatchRow
+                colors={INK_COLORS}
+                value={color}
+                onChange={setColor}
+                size={22}
+                spacing={2}
+                sx={{ justifyContent: 'flex-end', mb: 1, pr: 0.5 }}
+                swatchSx={(_, sel) => ({ cursor: 'pointer', boxShadow: sel ? `0 0 0 2px #fff, 0 0 0 4px ${ACTIVE}` : '0 0 0 1px rgba(0,0,0,.12)' })}
+              />
+            )}
 
             {tab === 0 && (
               <Stack spacing={1.5} alignItems="center">
@@ -441,7 +453,7 @@ export default function SignDialog({ open, onClose }: { open: boolean; onClose: 
             )}
           </Box>
 
-          <Stack direction="row" alignItems="center" sx={{ px: 3, py: 1.8, borderTop: `1px solid ${DIVIDER}` }}>
+          <DialogFooter>
             <FormControlLabel
               control={
                 <Checkbox
@@ -460,7 +472,7 @@ export default function SignDialog({ open, onClose }: { open: boolean; onClose: 
             <Button variant="contained" disabled={!canConfirm} onClick={confirm} sx={{ ...primaryButtonSx, ml: 1.5 }}>
               {t('done')}
             </Button>
-          </Stack>
+          </DialogFooter>
         </Box>
       )}
     </Dialog>
@@ -479,27 +491,6 @@ function visiblePageCenter(pageIndex: number): { x: number; y: number } | undefi
   const right = Math.min(r.right, window.innerWidth)
   if (bottom <= top || right <= left) return undefined
   return { x: ((left + right) / 2 - r.left) / r.width, y: ((top + bottom) / 2 - r.top) / r.height }
-}
-
-function InkSwatches({ color, setColor }: { color: string; setColor: (color: string) => void }): JSX.Element {
-  return (
-    <Stack direction="row" spacing={2} justifyContent="flex-end" sx={{ mb: 1, pr: 0.5 }}>
-      {INK_COLORS.map((cc) => (
-        <Box
-          key={cc}
-          onClick={() => setColor(cc)}
-          sx={{
-            width: 22,
-            height: 22,
-            borderRadius: '50%',
-            bgcolor: cc,
-            cursor: 'pointer',
-            boxShadow: color === cc ? `0 0 0 2px #fff, 0 0 0 4px ${ACTIVE}` : '0 0 0 1px rgba(0,0,0,.12)'
-          }}
-        />
-      ))}
-    </Stack>
-  )
 }
 
 const primaryButtonSx = {

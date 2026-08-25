@@ -3,6 +3,8 @@
  * 프리셋 25종 = pdfguru 기본 스탬프 세트 (직사각 20 + 날짜자동 2 + 화살표 태그 3 + 도형 2).
  */
 
+import { makeCanvas, toBitmap, loadImage, renderTextBitmap, type Bitmap } from './canvasUtil'
+
 export interface StampSpec {
   text: string
   /** 테두리·글자 색 (진한 톤) */
@@ -73,13 +75,10 @@ export function nowStampDateTime(): { date: string; time: string } {
 }
 
 /** 아이콘 스탬프 (굵은 X / 체크) */
-function renderIconStamp(icon: 'cross' | 'check', color: string): { dataUrl: string; aspect: number } {
+function renderIconStamp(icon: 'cross' | 'check', color: string): Bitmap {
   const scale = 3
   const S = 96 * scale
-  const canvas = document.createElement('canvas')
-  canvas.width = S
-  canvas.height = S
-  const ctx = canvas.getContext('2d')!
+  const { canvas, ctx } = makeCanvas(S, S)
   ctx.strokeStyle = color
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
@@ -96,11 +95,11 @@ function renderIconStamp(icon: 'cross' | 'check', color: string): { dataUrl: str
     ctx.lineTo(S * 0.86, S * 0.2)
   }
   ctx.stroke()
-  return { dataUrl: canvas.toDataURL('image/png'), aspect: 1 }
+  return toBitmap(canvas)
 }
 
 /** 스탬프를 캔버스에 그려 { dataUrl, aspect(w/h) } 반환 (Guru 스타일: 파스텔 채움 + 진한 이탤릭) */
-export function renderStamp(spec: StampSpec): { dataUrl: string; aspect: number } {
+export function renderStamp(spec: StampSpec): Bitmap {
   if (spec.icon) {
     // 아이콘은 X=빨강, 체크=초록 고정 톤 (Guru)
     return renderIconStamp(spec.icon, spec.icon === 'cross' ? '#d5565e' : '#82b346')
@@ -109,9 +108,8 @@ export function renderStamp(spec: StampSpec): { dataUrl: string; aspect: number 
   const fontPx = 34 * scale
   const subPx = 15 * scale
   const padY = 12 * scale
-  const canvas = document.createElement('canvas')
-  const ctx = canvas.getContext('2d')!
   const font = `italic 800 ${fontPx}px Arial, sans-serif`
+  const { canvas, ctx } = makeCanvas(0, 0)
   ctx.font = font
   const textW = ctx.measureText(spec.text).width
   const sub = [spec.date, spec.time].filter(Boolean).join(', ')
@@ -155,25 +153,13 @@ export function renderStamp(spec: StampSpec): { dataUrl: string; aspect: number 
     ctx.font = `700 ${subPx}px Arial, sans-serif`
     ctx.fillText(sub, cx, padY + fontPx + 4 * scale)
   }
-  return { dataUrl: canvas.toDataURL('image/png'), aspect: canvas.width / canvas.height }
+  return toBitmap(canvas)
 }
 
 /** 타이핑 서명 생성 (Sign > Type 탭) */
-export function renderTypedSign(text: string, fontFamily: string, color: string): { dataUrl: string; aspect: number } {
+export function renderTypedSign(text: string, fontFamily: string, color: string): Bitmap {
   const scale = 3
-  const fontPx = 64 * scale
-  const canvas = document.createElement('canvas')
-  const ctx = canvas.getContext('2d')!
-  ctx.font = `${fontPx}px ${fontFamily}`
-  const w = Math.max(ctx.measureText(text).width + 40 * scale, 100)
-  canvas.width = Math.ceil(w)
-  canvas.height = Math.ceil(fontPx * 1.5)
-  ctx.font = `${fontPx}px ${fontFamily}`
-  ctx.fillStyle = color
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText(text, canvas.width / 2, canvas.height / 2)
-  return { dataUrl: canvas.toDataURL('image/png'), aspect: canvas.width / canvas.height }
+  return renderTextBitmap(text, `${64 * scale}px ${fontFamily}`, color, { fontPx: 64 * scale, padX: 40 * scale, lineFactor: 1.5 })
 }
 
 export const SIGN_FONTS = [
@@ -184,16 +170,11 @@ export const SIGN_FONTS = [
 ]
 
 /** 이미지 파일 → dataUrl + 종횡비 */
-export function fileToDataUrl(file: File): Promise<{ dataUrl: string; aspect: number }> {
-  return new Promise((resolve, reject) => {
+export function fileToDataUrl(file: File): Promise<Bitmap> {
+  return new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
-    reader.onload = () => {
-      const img = new Image()
-      img.onload = () => resolve({ dataUrl: reader.result as string, aspect: img.width / img.height })
-      img.onerror = reject
-      img.src = reader.result as string
-    }
+    reader.onload = () => resolve(reader.result as string)
     reader.onerror = reject
     reader.readAsDataURL(file)
-  })
+  }).then((dataUrl) => loadImage(dataUrl).then((img) => ({ dataUrl, aspect: img.width / img.height })))
 }

@@ -4,9 +4,6 @@ import IconButton from '@mui/material/IconButton'
 import Typography from '@mui/material/Typography'
 import Tooltip from '@mui/material/Tooltip'
 import Menu from '@mui/material/Menu'
-import MenuItem from '@mui/material/MenuItem'
-import ListItemIcon from '@mui/material/ListItemIcon'
-import ListItemText from '@mui/material/ListItemText'
 import Divider from '@mui/material/Divider'
 import {
   IconPages,
@@ -39,8 +36,9 @@ import {
   IconRotateLeft,
   IconRotateRight
 } from './icons'
-import { useEditor, type Tool } from '@renderer/store/editor'
+import { useEditor, selectCanUndo, selectCanRedo, type Tool } from '@renderer/store/editor'
 import { useT } from '@renderer/i18n'
+import MenuAction from './ui/MenuAction'
 
 interface ToolBtnProps {
   label: string
@@ -128,8 +126,8 @@ export default function Toolbar(p: ToolbarProps): JSX.Element {
   const setTool = useEditor((s) => s.setTool)
   const undo = useEditor((s) => s.undo)
   const redo = useEditor((s) => s.redo)
-  const canUndo = useEditor((s) => s.history.past.length > 0 && !s.editTextSnapshot)
-  const canRedo = useEditor((s) => s.history.future.length > 0 && !s.editTextSnapshot)
+  const canUndo = useEditor(selectCanUndo)
+  const canRedo = useEditor(selectCanRedo)
   const pages = useEditor((s) => s.pages)
   const currentPage = useEditor((s) => s.currentPage)
   const pageRotate = useEditor((s) => s.pageRotate)
@@ -219,7 +217,10 @@ export default function Toolbar(p: ToolbarProps): JSX.Element {
 
       {/* ── 지우개 메뉴 ── */}
       <Menu anchorEl={eraserMenu} open={!!eraserMenu} onClose={() => setEraserMenu(null)}>
-        <MenuItem
+        <MenuAction
+          icon={<IconEraser fontSize="small" />}
+          label={t('eraser')}
+          secondary={t('eraserDesc')}
           selected={is('whiteout')}
           onClick={() => {
             setLastEraser('whiteout')
@@ -227,91 +228,61 @@ export default function Toolbar(p: ToolbarProps): JSX.Element {
             setTool('whiteout')
             setEraserMenu(null)
           }}
-        >
-          <ListItemIcon>
-            <IconEraser fontSize="small" />
-          </ListItemIcon>
-          <ListItemText primary={t('eraser')} secondary={t('eraserDesc')} />
-        </MenuItem>
-        <MenuItem
+        />
+        <MenuAction
+          icon={<IconEraser fontSize="small" />}
+          label={t('eraseDrawing')}
+          secondary={t('eraseDrawingDesc')}
           selected={is('eraseDrawing')}
           onClick={() => {
             setLastEraser('eraseDrawing')
             setTool('eraseDrawing')
             setEraserMenu(null)
           }}
-        >
-          <ListItemIcon>
-            <IconEraser fontSize="small" />
-          </ListItemIcon>
-          <ListItemText primary={t('eraseDrawing')} secondary={t('eraseDrawingDesc')} />
-        </MenuItem>
+        />
       </Menu>
 
       {/* ── 이미지/스탬프 메뉴 ── */}
       <Menu anchorEl={imageMenu} open={!!imageMenu} onClose={() => setImageMenu(null)}>
-        <MenuItem
+        <MenuAction
+          icon={<IconImage fontSize="small" />}
+          label={t('image')}
           onClick={() => {
             setLastImage('image')
             setImageMenu(null)
             p.onOpenImage()
           }}
-        >
-          <ListItemIcon>
-            <IconImage fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>{t('image')}</ListItemText>
-        </MenuItem>
-        <MenuItem
+        />
+        <MenuAction
+          icon={<IconStamp fontSize="small" />}
+          label={t('stamp')}
           onClick={() => {
             setLastImage('stamp')
             setImageMenu(null)
             p.onOpenStamp()
           }}
-        >
-          <ListItemIcon>
-            <IconStamp fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>{t('stamp')}</ListItemText>
-        </MenuItem>
+        />
       </Menu>
 
       {/* ── 도형 메뉴 (지우개가 켜져 있으면 지우개 도형을 바꾼다) ── */}
       <Menu anchorEl={shapeMenu} open={!!shapeMenu} onClose={() => setShapeMenu(null)}>
-        <MenuItem
-          selected={tool === 'whiteout' ? eraserKind === 'rect' : is('rect')}
-          onClick={() => {
-            if (tool === 'whiteout') {
-              setEraserStyle({ kind: 'rect' })
-            } else {
-              setLastShape('rect')
-              setTool('rect')
-            }
-            setShapeMenu(null)
-          }}
-        >
-          <ListItemIcon>
-            <IconSquare fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>{t('rectangle')}</ListItemText>
-        </MenuItem>
-        <MenuItem
-          selected={tool === 'whiteout' ? eraserKind === 'ellipse' : is('ellipse')}
-          onClick={() => {
-            if (tool === 'whiteout') {
-              setEraserStyle({ kind: 'ellipse' })
-            } else {
-              setLastShape('ellipse')
-              setTool('ellipse')
-            }
-            setShapeMenu(null)
-          }}
-        >
-          <ListItemIcon>
-            <IconCircle fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>{t('ellipse')}</ListItemText>
-        </MenuItem>
+        {(['rect', 'ellipse'] as const).map((k) => (
+          <MenuAction
+            key={k}
+            icon={k === 'rect' ? <IconSquare fontSize="small" /> : <IconCircle fontSize="small" />}
+            label={k === 'rect' ? t('rectangle') : t('ellipse')}
+            selected={tool === 'whiteout' ? eraserKind === k : is(k)}
+            onClick={() => {
+              if (tool === 'whiteout') {
+                setEraserStyle({ kind: k })
+              } else {
+                setLastShape(k)
+                setTool(k)
+              }
+              setShapeMenu(null)
+            }}
+          />
+        ))}
       </Menu>
 
       {/* ── 페이지 레이아웃 패널 (Guru: Page Mode / Page Transition / Page Rotation) ── */}

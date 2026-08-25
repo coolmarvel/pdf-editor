@@ -18,16 +18,9 @@ export function emptyHistory<S>(): History<S> {
 
 /** 변경 직전 상태를 기록. future는 버려진다. */
 export function push<S>(h: History<S>, snapshot: S): History<S> {
-  const past = h.past.length >= MAX_HISTORY ? h.past.slice(1) : h.past
-  return { past: [...past, snapshot], future: [] }
-}
-
-export function canUndo<S>(h: History<S>): boolean {
-  return h.past.length > 0
-}
-
-export function canRedo<S>(h: History<S>): boolean {
-  return h.future.length > 0
+  // 상한 도달 시 가장 오래된 것을 떨구며 한 번의 복사로 끝낸다
+  const past = h.past.length >= MAX_HISTORY ? [...h.past.slice(1), snapshot] : [...h.past, snapshot]
+  return { past, future: [] }
 }
 
 /** 현재 상태를 넘기면 [되돌린 상태, 새 히스토리]를 반환. 불가면 null */

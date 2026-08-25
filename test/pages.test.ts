@@ -5,9 +5,7 @@ import {
   removePages,
   duplicatePages,
   rotatePages,
-  movePages,
   nudgePages,
-  appendDocument,
   addRotation,
   type PageRef
 } from '../src/core/pages'
@@ -53,25 +51,11 @@ test('rotatePages: 90도 순환', () => {
   assert.equal(addRotation(0, -90), 270)
 })
 
-test('movePages: 묶음을 target 앞/뒤로', () => {
-  const before = movePages(mk(4), new Set(['p3']), 'p0', 'before')
-  assert.deepEqual(before.map((p) => p.id), ['p3', 'p0', 'p1', 'p2'])
-  const after = movePages(mk(4), new Set(['p0', 'p1']), 'p3', 'after')
-  assert.deepEqual(after.map((p) => p.id), ['p2', 'p3', 'p0', 'p1'])
-})
-
 test('nudgePages: 한 칸 이동, 경계에서 멈춤', () => {
   const fwd = nudgePages(mk(3), new Set(['p0']), 1)
   assert.deepEqual(fwd.map((p) => p.id), ['p1', 'p0', 'p2'])
   const stuck = nudgePages(mk(3), new Set(['p0']), -1)
   assert.deepEqual(stuck.map((p) => p.id), ['p0', 'p1', 'p2'])
-})
-
-test('appendDocument: 가져온 문서를 끝에 붙인다', () => {
-  const out = appendDocument(mk(1), 'imported', 2)
-  assert.equal(out.length, 3)
-  assert.equal(out[1].docId, 'imported')
-  assert.equal(out[2].pageIndex, 1)
 })
 
 test('movePagesToIndex: 드래그 삽입점 기준 이동', async () => {

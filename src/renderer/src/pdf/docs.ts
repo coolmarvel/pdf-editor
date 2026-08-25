@@ -6,8 +6,8 @@
  */
 import * as pdfjsLib from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-import type { PDFDocumentProxy } from 'pdfjs-dist'
-import type { PageRef, Rotation } from '@core/pages'
+import type { PDFDocumentProxy, PageViewport, RenderTask } from 'pdfjs-dist'
+import type { PageRef } from '@core/pages'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
 
@@ -18,6 +18,23 @@ interface SourceDoc {
 
 const docs = new Map<string, SourceDoc>()
 let dseq = 0
+/** 텍스트 스팬 추출 결과 캐시 — (docId, pageIndex, extraRotation) 의 순수 함수라 문서가 살아있는 동안 재사용 */
+const spanCache = new Map<string, Promise<TextSpan[]>>()
+
+const DEFAULT_BLANK = { w: 595, h: 842 }
+
+/** 빈 페이지의 표시 크기(pt) — 사용자 회전이 90/270 이면 가로세로 교환 */
+function blankSizeOf(ref: PageRef): { w: number; h: number } {
+  const { w, h } = ref.blankSize ?? DEFAULT_BLANK
+  return ref.extraRotation % 180 === 0 ? { w, h } : { w: h, h: w }
+}
+
+/** 소스 페이지 프록시 + 표시 뷰포트(소스 자체 회전 + 사용자 추가 회전 반영) */
+async function pageViewport(ref: PageRef, scale: number): Promise<{ page: pdfjsLib.PDFPageProxy; vp: PageViewport }> {
+  const page = await docs.get(ref.docId)!.proxy.getPage(ref.pageIndex + 1)
+  const vp = page.getViewport({ scale, rotation: (page.rotate + ref.extraRotation) % 360 })
+  return { page, vp }
+}
 
 export async function registerDoc(bytes: Uint8Array): Promise<{ docId: string; pageCount: number }> {
   // pdf.js가 버퍼를 detach 하므로 사본을 넘긴다
@@ -36,38 +53,51 @@ export function getDocBytes(docId: string): Uint8Array {
 export function clearDocs(): void {
   for (const d of docs.values()) void d.proxy.destroy()
   docs.clear()
+  spanCache.clear()
 }
 
 /** 표시 기준 페이지 크기 (pt). 소스 자체 회전 + 사용자 추가 회전 반영 */
 export async function getDisplaySize(ref: PageRef): Promise<{ w: number; h: number }> {
-  if (ref.docId === 'blank') {
-    const { w, h } = ref.blankSize ?? { w: 595, h: 842 }
-    return ref.extraRotation % 180 === 0 ? { w, h } : { w: h, h: w }
-  }
-  const page = await docs.get(ref.docId)!.proxy.getPage(ref.pageIndex + 1)
-  const vp = page.getViewport({ scale: 1, rotation: (page.rotate + ref.extraRotation) % 360 })
+  if (ref.docId === 'blank') return blankSizeOf(ref)
+  const { vp } = await pageViewport(ref, 1)
   return { w: vp.width, h: vp.height }
 }
 
-/** 페이지를 캔버스에 렌더 (scale = CSS px / pt 비율 × devicePixelRatio 등 호출부 결정) */
-export async function renderPage(ref: PageRef, canvas: HTMLCanvasElement, scale: number): Promise<void> {
+/**
+ * 페이지를 캔버스에 렌더 (scale = CSS px / pt 비율 × devicePixelRatio 등 호출부 결정).
+ * 반환값 = pdf.js RenderTask (빈 페이지는 undefined). 호출부가 task.cancel() 로 진행 중 렌더를 끊을 수 있다
+ * (줌 드래그처럼 같은 캔버스에 렌더가 연달아 걸릴 때). 취소되면 task.promise 가 RenderingCancelledException 으로 거부된다.
+ * 기존처럼 `await renderPage(...)` 만 하면 렌더 완료까지 기다린다.
+ * opts.onTask 는 render 시작 직후(완료 전) 호출되므로 여기서 받은 task 로 진행 중 렌더를 끊을 수 있고,
+ * opts.signal 이 abort 된 뒤에는 캔버스에 손대지 않는다 (같은 캔버스에 렌더가 겹치면 pdf.js 가 두 번째를 거부한다).
+ */
+export async function renderPage(
+  ref: PageRef,
+  canvas: HTMLCanvasElement,
+  scale: number,
+  opts?: { signal?: AbortSignal; onTask?: (task: RenderTask) => void }
+): Promise<RenderTask | undefined> {
+  if (opts?.signal?.aborted) return undefined
   if (ref.docId === 'blank') {
-    const { w, h } = ref.blankSize ?? { w: 595, h: 842 }
-    const dw = ref.extraRotation % 180 === 0 ? w : h
-    const dh = ref.extraRotation % 180 === 0 ? h : w
-    canvas.width = Math.round(dw * scale)
-    canvas.height = Math.round(dh * scale)
+    const { w, h } = blankSizeOf(ref)
+    canvas.width = Math.round(w * scale)
+    canvas.height = Math.round(h * scale)
     const ctx = canvas.getContext('2d')!
     ctx.fillStyle = '#ffffff'
     ctx.fillRect(0, 0, canvas.width, canvas.height)
-    return
+    return undefined
   }
-  const page = await docs.get(ref.docId)!.proxy.getPage(ref.pageIndex + 1)
-  const vp = page.getViewport({ scale, rotation: (page.rotate + ref.extraRotation) % 360 })
+  const { page, vp } = await pageViewport(ref, scale)
+  // 뷰포트 준비 중 호출부가 취소했으면 캔버스를 건드리지 않는다 (진행 중인 이전 렌더를 깨지 않도록)
+  if (opts?.signal?.aborted) return undefined
   canvas.width = Math.round(vp.width)
   canvas.height = Math.round(vp.height)
   const ctx = canvas.getContext('2d')!
-  await page.render({ canvasContext: ctx, viewport: vp }).promise
+  const task = page.render({ canvasContext: ctx, viewport: vp })
+  // 완료를 기다리기 전에 task 를 넘겨 호출부가 진행 중 렌더를 실제로 cancel 할 수 있게 한다
+  opts?.onTask?.(task)
+  await task.promise
+  return task
 }
 
 export interface TextSpan {
@@ -79,11 +109,21 @@ export interface TextSpan {
 }
 
 /** Edit Text용: 페이지의 텍스트 스팬을 표시 공간 정규화 좌표로 추출 */
-export async function extractTextSpans(ref: PageRef): Promise<TextSpan[]> {
-  if (ref.docId === 'blank') return []
-  const page = await docs.get(ref.docId)!.proxy.getPage(ref.pageIndex + 1)
-  const rotation = (page.rotate + ref.extraRotation) % 360
-  const vp = page.getViewport({ scale: 1, rotation })
+export function extractTextSpans(ref: PageRef): Promise<TextSpan[]> {
+  if (ref.docId === 'blank') return Promise.resolve([])
+  const key = `${ref.docId}:${ref.pageIndex}:${ref.extraRotation}`
+  let p = spanCache.get(key)
+  if (!p) {
+    p = computeTextSpans(ref)
+    spanCache.set(key, p)
+    // 실패(워커 오류 등)는 캐시에 남기지 않는다 — 다음 호출이 재시도
+    p.catch(() => spanCache.delete(key))
+  }
+  return p
+}
+
+async function computeTextSpans(ref: PageRef): Promise<TextSpan[]> {
+  const { page, vp } = await pageViewport(ref, 1)
   const content = await page.getTextContent()
   const spans: TextSpan[] = []
   for (const item of content.items) {

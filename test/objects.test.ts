@@ -1,6 +1,21 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { rotateRectCW, rotatePointCW, rotateObjectCW, hitTest, textBoxRect, newId, type ShapeObj, type StrokeObj, type TextObj } from '../src/core/objects'
+import {
+  rotateRectCW,
+  rotatePointCW,
+  rotateObjectCW,
+  hitTest,
+  textBoxRect,
+  objectRect,
+  setObjectRect,
+  unrotatePoint,
+  NOTE_HIT_SIZE,
+  newId,
+  type NoteObj,
+  type ShapeObj,
+  type StrokeObj,
+  type TextObj
+} from '../src/core/objects'
 
 function makeText(over: Partial<TextObj> = {}): TextObj {
   return {
@@ -105,4 +120,42 @@ test('rotateObjectCW: 텍스트 rotation 이 90도 누적', () => {
   const t = makeText({ rotation: 300 })
   const out = rotateObjectCW(t) as TextObj
   assert.equal(out.rotation, 30)
+})
+
+test('objectRect/setObjectRect: 종류별 상자 왕복', () => {
+  const t = makeText({ w: 0.2, h: 0.1 })
+  assert.deepEqual(objectRect(t), textBoxRect(t))
+  assert.deepEqual(setObjectRect(t, { x: 0.1, y: 0.2, w: 0.3, h: 0.4 }), { x: 0.1, y: 0.2, w: 0.3, h: 0.4 })
+
+  const sh: ShapeObj = {
+    id: newId(),
+    type: 'shape',
+    kind: 'rect',
+    rect: { x: 0.2, y: 0.2, w: 0.2, h: 0.1 },
+    stroke: '#f00',
+    strokeWidth: 0.004,
+    fill: null,
+    opacity: 1
+  }
+  assert.equal(objectRect(sh), sh.rect)
+  assert.deepEqual(setObjectRect(sh, { x: 0, y: 0, w: 1, h: 1 }), { rect: { x: 0, y: 0, w: 1, h: 1 } })
+
+  const n: NoteObj = { id: newId(), type: 'note', x: 0.5, y: 0.6, color: '#ff0', text: '', opacity: 1 }
+  assert.deepEqual(objectRect(n), { x: 0.5, y: 0.6, w: NOTE_HIT_SIZE, h: NOTE_HIT_SIZE })
+  // 노트는 위치만 옮기고 크기는 고정
+  assert.deepEqual(setObjectRect(n, { x: 0.1, y: 0.2, w: 0.5, h: 0.5 }), { x: 0.1, y: 0.2 })
+
+  const s: StrokeObj = { id: newId(), type: 'stroke', kind: 'pencil', color: '#000', width: 0.01, opacity: 1, points: [[0, 0]] }
+  assert.equal(objectRect(s), null)
+  assert.deepEqual(setObjectRect(s, { x: 0, y: 0, w: 1, h: 1 }), {})
+})
+
+test('unrotatePoint: 0도는 항등, 90도는 중심 기준 역회전 (aspect 보정)', () => {
+  assert.deepEqual(unrotatePoint(0.3, 0.7, 0.5, 0.5, 0, 2), [0.3, 0.7])
+  // aspect=1: 중심 (0.5,0.5) 기준 시계 90도 회전된 상자에서 중심 아래 점 (0.5, 0.6) 은 회전 전 오른쪽 (0.6, 0.5)
+  const [ux, uy] = unrotatePoint(0.5, 0.6, 0.5, 0.5, 90, 1)
+  assert.ok(Math.abs(ux - 0.6) < 1e-9 && Math.abs(uy - 0.5) < 1e-9)
+  // aspect=2 (가로가 긴 페이지): px 공간의 x 거리 0.1 은 정규화 x 거리 0.05
+  const [vx, vy] = unrotatePoint(0.5, 0.6, 0.5, 0.5, 90, 2)
+  assert.ok(Math.abs(vx - 0.55) < 1e-9 && Math.abs(vy - 0.5) < 1e-9)
 })

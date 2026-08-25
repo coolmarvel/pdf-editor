@@ -1,36 +1,114 @@
-import { useRef, useState } from 'react'
+import { memo, useCallback, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
 import Paper from '@mui/material/Paper'
 import IconButton from '@mui/material/IconButton'
 import Menu from '@mui/material/Menu'
-import MenuItem from '@mui/material/MenuItem'
-import ListItemIcon from '@mui/material/ListItemIcon'
-import ListItemText from '@mui/material/ListItemText'
 import Divider from '@mui/material/Divider'
-import GridViewRounded from '@mui/icons-material/GridViewRounded'
-import MoreVertRounded from '@mui/icons-material/MoreVertRounded'
-import ArrowUpwardRounded from '@mui/icons-material/ArrowUpwardRounded'
-import ArrowDownwardRounded from '@mui/icons-material/ArrowDownwardRounded'
-import RotateLeftRounded from '@mui/icons-material/RotateLeftRounded'
-import RotateRightRounded from '@mui/icons-material/RotateRightRounded'
-import ContentCopyRounded from '@mui/icons-material/ContentCopyRounded'
-import SaveAltRounded from '@mui/icons-material/SaveAltRounded'
-import DeleteOutlineRounded from '@mui/icons-material/DeleteOutlineRounded'
-import AddRounded from '@mui/icons-material/AddRounded'
-import UploadFileRounded from '@mui/icons-material/UploadFileRounded'
-import NoteAddOutlined from '@mui/icons-material/NoteAddOutlined'
+import type { PageRef } from '@core/pages'
 import { useEditor } from '@renderer/store/editor'
 import { useT } from '@renderer/i18n'
 import { ui } from '@renderer/theme'
 import { buildPdf } from '@renderer/pdf/save'
-import { IMAGE_ACCEPT } from '@renderer/pdf/imageToPdf'
-import { IconImage } from './icons'
+import { usePageImport } from '@renderer/hooks/usePageImport'
+import { useDragReorder, type DragReorderBind } from '@renderer/hooks/useDragReorder'
+import { ArrowDown, ArrowUp, Copy, Download, EllipsisVertical, FilePlus, FileUp, IconImage, LayoutGrid, Plus, RotateCcw, RotateCw, Trash2 } from './icons'
 import ThumbCanvas from './ThumbCanvas'
+import MenuAction from './ui/MenuAction'
 
 const MIN_W = 150
 const MAX_W = 420
+
+/** 페이지 사이 실선 + ⊕ (호버 시 진해짐). highlighted = 드롭 삽입점 (보라 선) */
+function Gap({ index, highlighted, onAdd }: { index: number; highlighted: boolean; onAdd: (anchor: HTMLElement, index: number) => void }): JSX.Element {
+  return (
+    <Box
+      sx={{
+        position: 'relative',
+        height: 14,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        '& .gapline': { position: 'absolute', left: 4, right: 4, top: '50%', height: '1px', bgcolor: 'divider' },
+        '& .gapbtn': { opacity: 0, transition: 'opacity .12s', zIndex: 1 },
+        '&:hover .gapbtn': { opacity: 1 },
+        ...(highlighted ? { '& .gapline': { position: 'absolute', left: 4, right: 4, top: '50%', height: '3px', bgcolor: 'secondary.main', borderRadius: 2 } } : {})
+      }}
+    >
+      <Box className="gapline" />
+      <IconButton
+        className="gapbtn"
+        size="small"
+        onClick={(e) => onAdd(e.currentTarget, index)}
+        sx={{ width: 18, height: 18, bgcolor: '#fff', border: '1px solid #d7dae0', '&:hover': { bgcolor: '#f1f2f4' } }}
+      >
+        <Plus sx={{ fontSize: 13 }} />
+      </IconButton>
+    </Box>
+  )
+}
+
+interface ThumbRowProps {
+  page: PageRef
+  index: number
+  active: boolean
+  pageW: number
+  pageH: number
+  /** 썸네일 백킹 스토어 폭 px */
+  thumbW: number
+  dragging: boolean
+  /** 이 행 아래 gap 이 드롭 삽입점인가 */
+  dropAfter: boolean
+  drag: DragReorderBind
+  onMenu: (anchor: HTMLElement, index: number) => void
+  onAdd: (anchor: HTMLElement, index: number) => void
+}
+
+/** 썸네일 한 행 + 아래 gap. memo: 객체 드래그/다른 행의 상태 변화에 N행 전체가 재조정되지 않게 (props 전부 원시값/고정 identity) */
+const ThumbRow = memo(function ThumbRow({ page, index, active, pageW, pageH, thumbW, dragging, dropAfter, drag, onMenu, onAdd }: ThumbRowProps): JSX.Element {
+  return (
+    <Box>
+      <Box
+        data-thumb
+        data-pgid={page.id}
+        onPointerDown={(e) => drag.onPointerDown(e, index)}
+        onPointerMove={drag.onPointerMove}
+        onPointerUp={() => drag.onPointerUp(index)}
+        sx={{
+          position: 'relative',
+          cursor: 'pointer',
+          userSelect: 'none',
+          touchAction: 'none',
+          opacity: dragging ? 0.4 : 1,
+          '& .thumbmenu': { opacity: 0, transition: 'opacity .12s' },
+          '&:hover .thumbmenu': { opacity: 1 }
+        }}
+      >
+        <Paper variant="outlined" sx={{ overflow: 'hidden', borderColor: active ? 'secondary.main' : 'divider', borderWidth: active ? 2 : 1, borderRadius: 1.5 }}>
+          <ThumbCanvas page={page} width={thumbW} pageW={pageW} pageH={pageH} />
+        </Paper>
+        {/* 호버 ⋮ 메뉴 버튼 (우측 상단) */}
+        <IconButton
+          className="thumbmenu"
+          size="small"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation()
+            onMenu(e.currentTarget, index)
+          }}
+          sx={{ position: 'absolute', top: 6, right: 6, width: 24, height: 24, bgcolor: 'rgba(255,255,255,.95)', border: '1px solid #d7dae0', boxShadow: 1, '&:hover': { bgcolor: '#fff' } }}
+        >
+          <EllipsisVertical sx={{ fontSize: 16 }} />
+        </IconButton>
+        <Typography variant="caption" display="block" textAlign="center" color={active ? 'secondary.main' : 'text.secondary'} fontWeight={active ? 700 : 400}>
+          {index + 1}
+        </Typography>
+      </Box>
+      <Gap index={index + 1} highlighted={dropAfter} onAdd={onAdd} />
+    </Box>
+  )
+})
 
 /**
  * 좌측 페이지 사이드바 (Guru 파리티):
@@ -41,7 +119,6 @@ export default function ThumbnailSidebar({ onManagePages }: { onManagePages: () 
   const t = useT()
   const pages = useEditor((s) => s.pages)
   const displaySizes = useEditor((s) => s.displaySizes)
-  const objectsByPage = useEditor((s) => s.objectsByPage)
   const currentPage = useEditor((s) => s.currentPage)
   const requestScrollTo = useEditor((s) => s.requestScrollTo)
   const pageNudge = useEditor((s) => s.pageNudge)
@@ -49,11 +126,8 @@ export default function ThumbnailSidebar({ onManagePages }: { onManagePages: () 
   const pageDuplicate = useEditor((s) => s.pageDuplicate)
   const pageRemove = useEditor((s) => s.pageRemove)
   const pageInsertBlank = useEditor((s) => s.pageInsertBlank)
-  const pageImport = useEditor((s) => s.pageImport)
-  const pageImportImages = useEditor((s) => s.pageImportImages)
-  const setNotice = useEditor((s) => s.setNotice)
   const pageMoveToIndex = useEditor((s) => s.pageMoveToIndex)
-  const fileName = useEditor((s) => s.fileName)
+  const { inputs, openPdf, openImages } = usePageImport()
 
   const [width, setWidth] = useState(() => {
     const saved = Number(localStorage.getItem('sidebarW'))
@@ -63,14 +137,18 @@ export default function ThumbnailSidebar({ onManagePages }: { onManagePages: () 
   const [pageMenu, setPageMenu] = useState<{ anchor: HTMLElement; index: number } | null>(null)
   /** ⊕ 메뉴 (삽입 위치) */
   const [addMenu, setAddMenu] = useState<{ anchor: HTMLElement; index: number } | null>(null)
-  /** 드래그 중인 페이지 index / 삽입점 (포인터 기반 — HTML5 dnd 는 Electron 에서 불안정) */
-  const [dragIdx, setDragIdx] = useState<number | null>(null)
-  const [dropIdx, setDropIdx] = useState<number | null>(null)
-  const dragRef = useRef<{ index: number; startY: number; active: boolean; drop: number | null } | null>(null)
-  const fileRef = useRef<HTMLInputElement>(null)
-  const imageRef = useRef<HTMLInputElement>(null)
-  const insertAtRef = useRef(0)
   const listRef = useRef<HTMLDivElement>(null)
+
+  const { dragIdx, dropIdx, bind } = useDragReorder({
+    containerRef: listRef,
+    itemSelector: '[data-thumb]',
+    axis: 'y',
+    threshold: 6,
+    onDrop: (index, drop) => pageMoveToIndex(new Set([pages[index].id]), drop),
+    onClick: requestScrollTo // 클릭 = 해당 페이지로 이동
+  })
+  const onMenu = useCallback((anchor: HTMLElement, index: number) => setPageMenu({ anchor, index }), [])
+  const onAdd = useCallback((anchor: HTMLElement, index: number) => setAddMenu({ anchor, index }), [])
 
   function startResize(e: React.PointerEvent): void {
     e.preventDefault()
@@ -90,155 +168,52 @@ export default function ThumbnailSidebar({ onManagePages }: { onManagePages: () 
   }
 
   async function extractPage(index: number): Promise<void> {
+    // objectsByPage 는 구독하지 않는다 — 드래그마다 바뀌는 값이라 사이드바 전체가 재렌더된다. 필요할 때만 읽는다
+    const { objectsByPage } = useEditor.getState()
     const p = pages[index]
     const bytes = await buildPdf({ pages: [p], objectsByPage: { [p.id]: objectsByPage[p.id] ?? [] }, displaySizes })
-    await window.api.saveBuffer(`${fileName || 'document'}-p${index + 1}.pdf`, bytes)
+    await window.api.saveBuffer(`${useEditor.getState().fileName || 'document'}-p${index + 1}.pdf`, bytes)
   }
 
-  async function onImportFile(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
-    const bytes = new Uint8Array(await file.arrayBuffer())
-    await pageImport(bytes, insertAtRef.current)
+  /** ⋮ 메뉴 항목 실행 후 닫기 */
+  const act = (fn: (id: string, index: number) => void) => (): void => {
+    if (pageMenu) fn(pages[pageMenu.index].id, pageMenu.index)
+    setPageMenu(null)
+  }
+  /** ⊕ 메뉴 항목 실행 후 닫기 */
+  const actAdd = (fn: (index: number) => void) => (): void => {
+    if (addMenu) fn(addMenu.index)
+    setAddMenu(null)
   }
 
-  /** ⊕ 위치에 이미지들을 각각 1페이지로 삽입 */
-  async function onImportImages(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
-    const files = Array.from(e.target.files ?? [])
-    e.target.value = ''
-    if (files.length === 0) return
-    try {
-      await pageImportImages(files, insertAtRef.current)
-      setNotice({ msg: t('imagePagesAdded'), severity: 'success' })
-    } catch {
-      setNotice({ msg: t('imageImportFailed'), severity: 'error' })
-    }
-  }
-
-  /** 컨테이너 기준 드래그 위치 → 삽입점 계산 (썸네일 중앙 기준 위/아래) */
-  function calcDropIndex(clientY: number): number {
-    const nodes = listRef.current?.querySelectorAll('[data-thumb]')
-    if (!nodes || nodes.length === 0) return 0
-    let idx = nodes.length
-    for (let i = 0; i < nodes.length; i++) {
-      const r = nodes[i].getBoundingClientRect()
-      if (clientY < r.top + r.height / 2) {
-        idx = i
-        break
-      }
-    }
-    return idx
-  }
-
-  /** 페이지 사이 실선 + ⊕ (호버 시 진해짐) */
-  const gap = (index: number): JSX.Element => (
-    <Box
-      key={`gap-${index}`}
-      sx={{
-        position: 'relative',
-        height: 14,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        '& .gapline': { position: 'absolute', left: 4, right: 4, top: '50%', height: '1px', bgcolor: 'divider' },
-        '& .gapbtn': { opacity: 0, transition: 'opacity .12s', zIndex: 1 },
-        '&:hover .gapbtn': { opacity: 1 },
-        // 드롭 삽입점 표시 (보라 선)
-        ...(dropIdx === index && dragIdx !== null ? { '& .gapline': { position: 'absolute', left: 4, right: 4, top: '50%', height: '3px', bgcolor: 'secondary.main', borderRadius: 2 } } : {})
-      }}
-    >
-      <Box className="gapline" />
-      <IconButton
-        className="gapbtn"
-        size="small"
-        onClick={(e) => setAddMenu({ anchor: e.currentTarget, index })}
-        sx={{ width: 18, height: 18, bgcolor: '#fff', border: '1px solid #d7dae0', '&:hover': { bgcolor: '#f1f2f4' } }}
-      >
-        <AddRounded sx={{ fontSize: 13 }} />
-      </IconButton>
-    </Box>
-  )
+  // 썸네일 백킹 스토어 = 실제 표시 폭 × dpr (고정 300 은 기본 폭 208 에서 2배 과잉 래스터화였다).
+  // 64px 단위로 올림 — 폭 핸들을 끄는 동안 픽셀마다 전 썸네일이 재래스터화되지 않게
+  const thumbW = Math.ceil((width * Math.min(window.devicePixelRatio || 1, 2)) / 64) * 64
 
   return (
     <Box sx={{ position: 'relative', width, flexShrink: 0, borderRight: 1, borderColor: 'divider', bgcolor: ui.surface.sidebar, display: 'flex', flexDirection: 'column' }}>
       <Box ref={listRef} sx={{ flex: 1, overflowY: 'auto', p: 1.5, pt: 1.5 }}>
-        <Button fullWidth size="small" variant="outlined" color="inherit" startIcon={<GridViewRounded />} onClick={onManagePages} sx={{ mb: 0.5 }}>
+        <Button fullWidth size="small" variant="outlined" color="inherit" startIcon={<LayoutGrid />} onClick={onManagePages} sx={{ mb: 0.5 }}>
           {t('managePages')}
         </Button>
-        {gap(0)}
+        <Gap index={0} highlighted={dropIdx === 0 && dragIdx !== null} onAdd={onAdd} />
         {pages.map((p, i) => {
           const size = displaySizes[p.id] ?? { w: 595, h: 842 }
-          const active = i === currentPage
           return (
-            <Box key={p.id}>
-              <Box
-                data-thumb
-                data-pgid={p.id}
-                onPointerDown={(e) => {
-                  if (e.button !== 0) return
-                  e.preventDefault() // 드래그 중 텍스트 선택·브라우저 자동 스크롤 방지
-                  dragRef.current = { index: i, startY: e.clientY, active: false, drop: null }
-                  ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-                }}
-                onPointerMove={(e) => {
-                  const d = dragRef.current
-                  if (!d) return
-                  if (!d.active && Math.abs(e.clientY - d.startY) > 6) {
-                    d.active = true
-                    setDragIdx(d.index)
-                  }
-                  if (d.active) {
-                    d.drop = calcDropIndex(e.clientY)
-                    setDropIdx(d.drop)
-                  }
-                }}
-                onPointerUp={() => {
-                  const d = dragRef.current
-                  dragRef.current = null
-                  if (d?.active) {
-                    if (d.drop !== null) pageMoveToIndex(new Set([pages[d.index].id]), d.drop)
-                    setDragIdx(null)
-                    setDropIdx(null)
-                  } else {
-                    requestScrollTo(i) // 클릭 = 해당 페이지로 이동
-                  }
-                }}
-                sx={{
-                  position: 'relative',
-                  cursor: 'pointer',
-                  userSelect: 'none',
-                  touchAction: 'none',
-                  opacity: dragIdx === i ? 0.4 : 1,
-                  '& .thumbmenu': { opacity: 0, transition: 'opacity .12s' },
-                  '&:hover .thumbmenu': { opacity: 1 }
-                }}
-              >
-                <Paper
-                  variant="outlined"
-                  sx={{ overflow: 'hidden', borderColor: active ? 'secondary.main' : 'divider', borderWidth: active ? 2 : 1, borderRadius: 1.5 }}
-                >
-                  <ThumbCanvas page={p} width={300} pageW={size.w} />
-                </Paper>
-                {/* 호버 ⋮ 메뉴 버튼 (우측 상단) */}
-                <IconButton
-                  className="thumbmenu"
-                  size="small"
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setPageMenu({ anchor: e.currentTarget, index: i })
-                  }}
-                  sx={{ position: 'absolute', top: 6, right: 6, width: 24, height: 24, bgcolor: 'rgba(255,255,255,.95)', border: '1px solid #d7dae0', boxShadow: 1, '&:hover': { bgcolor: '#fff' } }}
-                >
-                  <MoreVertRounded sx={{ fontSize: 16 }} />
-                </IconButton>
-                <Typography variant="caption" display="block" textAlign="center" color={active ? 'secondary.main' : 'text.secondary'} fontWeight={active ? 700 : 400}>
-                  {i + 1}
-                </Typography>
-              </Box>
-              {gap(i + 1)}
-            </Box>
+            <ThumbRow
+              key={p.id}
+              page={p}
+              index={i}
+              active={i === currentPage}
+              pageW={size.w}
+              pageH={size.h}
+              thumbW={thumbW}
+              dragging={dragIdx === i}
+              dropAfter={dropIdx === i + 1 && dragIdx !== null}
+              drag={bind}
+              onMenu={onMenu}
+              onAdd={onAdd}
+            />
           )
         })}
       </Box>
@@ -260,135 +235,24 @@ export default function ThumbnailSidebar({ onManagePages }: { onManagePages: () 
 
       {/* ⋮ 페이지 메뉴 */}
       <Menu anchorEl={pageMenu?.anchor ?? null} open={!!pageMenu} onClose={() => setPageMenu(null)}>
-        <MenuItem
-          disabled={pageMenu?.index === 0}
-          onClick={() => {
-            if (pageMenu) pageNudge(new Set([pages[pageMenu.index].id]), -1)
-            setPageMenu(null)
-          }}
-        >
-          <ListItemIcon>
-            <ArrowUpwardRounded fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>{t('moveUp')}</ListItemText>
-        </MenuItem>
-        <MenuItem
-          disabled={pageMenu?.index === pages.length - 1}
-          onClick={() => {
-            if (pageMenu) pageNudge(new Set([pages[pageMenu.index].id]), 1)
-            setPageMenu(null)
-          }}
-        >
-          <ListItemIcon>
-            <ArrowDownwardRounded fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>{t('moveDown')}</ListItemText>
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            if (pageMenu) pageRotate(new Set([pages[pageMenu.index].id]), -90)
-            setPageMenu(null)
-          }}
-        >
-          <ListItemIcon>
-            <RotateLeftRounded fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>{t('rotateLeft')}</ListItemText>
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            if (pageMenu) pageRotate(new Set([pages[pageMenu.index].id]), 90)
-            setPageMenu(null)
-          }}
-        >
-          <ListItemIcon>
-            <RotateRightRounded fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>{t('rotateRight')}</ListItemText>
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            if (pageMenu) pageDuplicate(new Set([pages[pageMenu.index].id]))
-            setPageMenu(null)
-          }}
-        >
-          <ListItemIcon>
-            <ContentCopyRounded fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>{t('duplicate')}</ListItemText>
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            if (pageMenu) void extractPage(pageMenu.index)
-            setPageMenu(null)
-          }}
-        >
-          <ListItemIcon>
-            <SaveAltRounded fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>{t('extractPage')}</ListItemText>
-        </MenuItem>
+        <MenuAction icon={<ArrowUp fontSize="small" />} label={t('moveUp')} disabled={pageMenu?.index === 0} onClick={act((id) => pageNudge(new Set([id]), -1))} />
+        <MenuAction icon={<ArrowDown fontSize="small" />} label={t('moveDown')} disabled={pageMenu?.index === pages.length - 1} onClick={act((id) => pageNudge(new Set([id]), 1))} />
+        <MenuAction icon={<RotateCcw fontSize="small" />} label={t('rotateLeft')} onClick={act((id) => pageRotate(new Set([id]), -90))} />
+        <MenuAction icon={<RotateCw fontSize="small" />} label={t('rotateRight')} onClick={act((id) => pageRotate(new Set([id]), 90))} />
+        <MenuAction icon={<Copy fontSize="small" />} label={t('duplicate')} onClick={act((id) => pageDuplicate(new Set([id])))} />
+        <MenuAction icon={<Download fontSize="small" />} label={t('extractPage')} onClick={act((_, index) => void extractPage(index))} />
         <Divider />
-        <MenuItem
-          disabled={pages.length <= 1}
-          onClick={() => {
-            if (pageMenu) pageRemove(new Set([pages[pageMenu.index].id]))
-            setPageMenu(null)
-          }}
-          sx={{ color: 'primary.main' }}
-        >
-          <ListItemIcon>
-            <DeleteOutlineRounded fontSize="small" color="primary" />
-          </ListItemIcon>
-          <ListItemText>{t('delete')}</ListItemText>
-        </MenuItem>
+        <MenuAction icon={<Trash2 fontSize="small" color="primary" />} label={t('delete')} disabled={pages.length <= 1} onClick={act((id) => pageRemove(new Set([id])))} sx={{ color: 'primary.main' }} />
       </Menu>
 
       {/* ⊕ 삽입 메뉴 */}
       <Menu anchorEl={addMenu?.anchor ?? null} open={!!addMenu} onClose={() => setAddMenu(null)}>
-        <MenuItem
-          onClick={() => {
-            if (addMenu) {
-              insertAtRef.current = addMenu.index
-              fileRef.current?.click()
-            }
-            setAddMenu(null)
-          }}
-        >
-          <ListItemIcon>
-            <UploadFileRounded fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>{t('uploadPdf')}</ListItemText>
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            if (addMenu) {
-              insertAtRef.current = addMenu.index
-              imageRef.current?.click()
-            }
-            setAddMenu(null)
-          }}
-        >
-          <ListItemIcon>
-            <IconImage fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>{t('uploadImage')}</ListItemText>
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            if (addMenu) pageInsertBlank(addMenu.index)
-            setAddMenu(null)
-          }}
-        >
-          <ListItemIcon>
-            <NoteAddOutlined fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>{t('addPage')}</ListItemText>
-        </MenuItem>
+        <MenuAction icon={<FileUp fontSize="small" />} label={t('uploadPdf')} onClick={actAdd(openPdf)} />
+        <MenuAction icon={<IconImage fontSize="small" />} label={t('uploadImage')} onClick={actAdd(openImages)} />
+        <MenuAction icon={<FilePlus fontSize="small" />} label={t('addPage')} onClick={actAdd(pageInsertBlank)} />
       </Menu>
 
-      <input ref={fileRef} type="file" accept="application/pdf" hidden onChange={(e) => void onImportFile(e)} />
-      <input ref={imageRef} type="file" accept={IMAGE_ACCEPT} multiple hidden onChange={(e) => void onImportImages(e)} />
+      {inputs}
     </Box>
   )
 }

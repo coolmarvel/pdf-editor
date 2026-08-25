@@ -13,6 +13,7 @@
  * - 여백 0 (가장자리까지 꽉).
  */
 import { PDFDocument } from 'pdf-lib'
+import { makeCanvas, releaseCanvas, canvasBytes } from '@renderer/editor/canvasUtil'
 
 /** 재인코딩 시 긴 변 상한 (A4 300dpi ≈ 3508px). 원본이 이보다 크면 저장 파일이 과하게 불어난다 */
 const MAX_EDGE = 3508
@@ -80,18 +81,15 @@ async function reencode(bmp: ImageBitmap, asPng: boolean): Promise<{ bytes: Uint
   const scale = Math.min(1, MAX_EDGE / Math.max(bmp.width, bmp.height))
   const w = Math.max(1, Math.round(bmp.width * scale))
   const h = Math.max(1, Math.round(bmp.height * scale))
-  const canvas = document.createElement('canvas')
-  canvas.width = w
-  canvas.height = h
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('canvas 2d context unavailable')
-  ctx.fillStyle = '#ffffff'
-  ctx.fillRect(0, 0, w, h)
-  ctx.drawImage(bmp, 0, 0, w, h)
-  const type = asPng ? 'image/png' : 'image/jpeg'
-  const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, type, JPEG_QUALITY))
-  if (!blob) throw new Error('image encode failed')
-  return { bytes: new Uint8Array(await blob.arrayBuffer()), kind: asPng ? 'png' : 'jpeg' }
+  const { canvas, ctx } = makeCanvas(w, h)
+  try {
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, w, h)
+    ctx.drawImage(bmp, 0, 0, w, h)
+    return { bytes: await canvasBytes(canvas, asPng ? 'image/png' : 'image/jpeg', JPEG_QUALITY), kind: asPng ? 'png' : 'jpeg' }
+  } finally {
+    releaseCanvas(canvas)
+  }
 }
 
 /**
@@ -110,18 +108,22 @@ export async function imageFileToPdfBytes(file: Blob, opt: ImagePageOptions): Pr
     const passthrough = type !== 'other' && !oversized && !rotated
 
     const doc = await PDFDocument.create()
-    let img: Awaited<ReturnType<typeof doc.embedJpg>> | Awaited<ReturnType<typeof doc.embedPng>>
+    const embed = (bytes: Uint8Array, kind: 'jpeg' | 'png'): ReturnType<typeof doc.embedJpg> | ReturnType<typeof doc.embedPng> =>
+      kind === 'jpeg' ? doc.embedJpg(bytes) : doc.embedPng(bytes)
+    const reembed = async (): ReturnType<typeof embed> => {
+      const re = await reencode(bmp, type === 'png')
+      return embed(re.bytes, re.kind)
+    }
+    let img: Awaited<ReturnType<typeof embed>>
     if (passthrough) {
       try {
-        img = type === 'jpeg' ? await doc.embedJpg(raw) : await doc.embedPng(raw)
+        img = await embed(raw, type as 'jpeg' | 'png')
       } catch {
         // pdf-lib 이 못 읽는 변종(16bit PNG, 인터레이스 등) — 캔버스로 다시 구워 재시도
-        const re = await reencode(bmp, type === 'png')
-        img = re.kind === 'jpeg' ? await doc.embedJpg(re.bytes) : await doc.embedPng(re.bytes)
+        img = await reembed()
       }
     } else {
-      const re = await reencode(bmp, type === 'png')
-      img = re.kind === 'jpeg' ? await doc.embedJpg(re.bytes) : await doc.embedPng(re.bytes)
+      img = await reembed()
     }
 
     // 이미지 방향에 맞춰 용지 방향만 전환 (용지 규격 자체는 유지)

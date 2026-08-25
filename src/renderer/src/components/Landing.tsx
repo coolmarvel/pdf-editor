@@ -5,14 +5,9 @@ import Typography from '@mui/material/Typography'
 import Button from '@mui/material/Button'
 import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
-import UploadFileRounded from '@mui/icons-material/UploadFileRounded'
-import ShieldOutlined from '@mui/icons-material/ShieldOutlined'
-import EditNoteOutlined from '@mui/icons-material/EditNoteOutlined'
-import BoltOutlined from '@mui/icons-material/BoltOutlined'
-import PictureAsPdfRounded from '@mui/icons-material/PictureAsPdfRounded'
-import LanguageRounded from '@mui/icons-material/LanguageRounded'
 import { useEditor } from '@renderer/store/editor'
 import { useT } from '@renderer/i18n'
+import { FilePen, FileText, FileUp, Languages, Shield, Zap } from './icons'
 
 function Feature({ icon, label }: { icon: JSX.Element; label: string }): JSX.Element {
   return (
@@ -60,7 +55,7 @@ export default function Landing(): JSX.Element {
     <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.default', p: 3, position: 'relative' }}>
       {/* 언어 선택 (우측 상단) */}
       <Stack direction="row" spacing={1} alignItems="center" sx={{ position: 'absolute', top: 16, right: 20 }}>
-        <LanguageRounded sx={{ color: 'text.secondary', fontSize: 20 }} />
+        <Languages sx={{ color: 'text.secondary', fontSize: 20 }} />
         <ToggleButtonGroup
           size="small"
           exclusive
@@ -74,7 +69,7 @@ export default function Landing(): JSX.Element {
       </Stack>
 
       <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 4 }}>
-        <PictureAsPdfRounded color="primary" sx={{ fontSize: 34 }} />
+        <FileText color="primary" sx={{ fontSize: 34 }} />
         <Typography variant="h5" fontWeight={800}>
           {t('appName')}
         </Typography>
@@ -120,7 +115,7 @@ export default function Landing(): JSX.Element {
           <Button
             variant="contained"
             size="large"
-            startIcon={<UploadFileRounded />}
+            startIcon={<FileUp />}
             onClick={openFile}
             sx={{ bgcolor: '#fff', color: 'primary.main', px: 4, py: 1.4, fontSize: 16, '&:hover': { bgcolor: '#e6f2ea' } }}
           >
@@ -139,9 +134,9 @@ export default function Landing(): JSX.Element {
       )}
 
       <Stack direction="row" spacing={4} sx={{ mt: 5 }}>
-        <Feature icon={<ShieldOutlined fontSize="small" />} label={t('featOffline')} />
-        <Feature icon={<EditNoteOutlined fontSize="small" />} label={t('featEasy')} />
-        <Feature icon={<BoltOutlined fontSize="small" />} label={t('featFast')} />
+        <Feature icon={<Shield fontSize="small" />} label={t('featOffline')} />
+        <Feature icon={<FilePen fontSize="small" />} label={t('featEasy')} />
+        <Feature icon={<Zap fontSize="small" />} label={t('featFast')} />
       </Stack>
     </Box>
   )
