@@ -20,7 +20,7 @@ import type { PageObject, ObjectId, DashStyle, BlendMode } from '@core/objects'
 import { newId, rotateObjectCW } from '@core/objects'
 import type { History } from '@core/history'
 import { emptyHistory, push, undo as hUndo, redo as hRedo } from '@core/history'
-import { registerDoc, getDisplaySize, clearDocs } from '@renderer/pdf/docs'
+import { registerDoc, getDisplaySize, clearDocs, extractTextSpans } from '@renderer/pdf/docs'
 import { imageFilesToPdfBytes, A4 } from '@renderer/pdf/imageToPdf'
 
 export type Tool =
@@ -125,6 +125,27 @@ export type PageMode = 'single' | 'double'
 /** 페이지 전환: 이어서 스크롤 / 한 장(쌍)씩 보기 */
 export type PageTransition = 'continuous' | 'paged'
 
+/** 문서 텍스트 검색 일치 1건 — rect 는 페이지 정규화 좌표(스팬 rect 를 글자 오프셋 비율로 잘라낸 근사값) */
+export interface SearchMatch {
+  pageId: string
+  pageIndex: number
+  rect: { x: number; y: number; w: number; h: number }
+}
+
+/**
+ * 텍스트 검색 상태 (pdfguru 의 상단 검색 바).
+ * matchesByPage 는 matches 를 페이지별로 미리 묶은 파생값 — PageCanvas 가 "내 페이지 일치만" 을
+ * 안정된 참조로 구독하게 해서(매 렌더 filter 로 새 배열을 만들면 memo 가 깨진다) 다른 페이지의 재렌더를 막는다.
+ */
+export interface SearchState {
+  open: boolean
+  query: string
+  matches: SearchMatch[]
+  matchesByPage: Record<string, SearchMatch[]>
+  /** 현재 일치 index (matches 가 비면 -1) */
+  current: number
+}
+
 interface EditorState {
   phase: Phase
   loadingProgress: number
@@ -171,6 +192,7 @@ interface EditorState {
   editTextExitPrompt: Tool | null
   /** editText 객체 삭제 확인 대기 (Editor 가 다이얼로그 표시) */
   deletePrompt: { pageId: string; objectId: ObjectId } | null
+  search: SearchState
 
   openDocument(name: string, bytes: Uint8Array, onProgress?: (p: number) => void): Promise<void>
   closeDocument(): void
@@ -213,6 +235,17 @@ interface EditorState {
   /** 드래그 앤 드롭: 페이지 묶음을 index 위치로 이동 */
   pageMoveToIndex(ids: Set<string>, index: number): void
 
+  openSearch(): void
+  /** 닫으면서 질의·일치를 모두 비운다 (페이지 연산 뒤 낡은 하이라이트가 남지 않게) */
+  closeSearch(): void
+  /**
+   * 질의 설정 + 전 페이지 대소문자 무시 검색 (비동기 — 스팬 추출은 페이지별 캐시).
+   * 결과가 도착하면 첫 일치로 스크롤. 호출이 겹치면 마지막 호출만 반영(이전 결과 폐기).
+   */
+  setSearchQuery(q: string): Promise<void>
+  searchNext(): void
+  searchPrev(): void
+
   undo(): void
   redo(): void
 
@@ -254,6 +287,10 @@ const DEFAULT_TEXT: TextStyle = {
   valign: 'top',
   opacity: 1
 }
+
+const EMPTY_SEARCH: SearchState = { open: false, query: '', matches: [], matchesByPage: {}, current: -1 }
+/** setSearchQuery 호출 일련번호 — 비동기 스팬 추출 뒤 낡은 결과를 버리기 위해 */
+let searchSeq = 0
 
 function snap(s: EditorState): Snapshot {
   return { pages: s.pages, objectsByPage: s.objectsByPage, displaySizes: s.displaySizes }
@@ -340,6 +377,17 @@ export const useEditor = create<EditorState>()((set, get) => {
     commit({ pages: fn(get().pages) })
   }
 
+  /** 검색 일치 이동 (양끝에서 감김). 페이지가 바뀌면 그 페이지로 스크롤 */
+  function stepSearch(dir: 1 | -1): void {
+    const { search } = get()
+    const n = search.matches.length
+    if (n === 0) return
+    const current = (search.current + dir + n) % n
+    set({ search: { ...search, current } })
+    const m = search.matches[current]
+    if (m.pageIndex !== get().currentPage) get().requestScrollTo(m.pageIndex)
+  }
+
   /** undo/redo 공통: 텍스트 수정 세션 중엔 비활성 (Guru 동작 — 종료 시 저장/취소로 처리) */
   function step(apply: typeof hUndo): void {
     const s = get()
@@ -389,6 +437,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     editTextSnapshot: null,
     editTextExitPrompt: null,
     deletePrompt: null,
+    search: EMPTY_SEARCH,
 
     async openDocument(name, bytes, onProgress) {
       set({ phase: 'loading', loadingProgress: 5, fileName: name.replace(/\.pdf$/i, '') })
@@ -430,7 +479,8 @@ export const useEditor = create<EditorState>()((set, get) => {
         selected: null,
         pendingImage: null,
         currentPage: 0,
-        zoom: 0
+        zoom: 0,
+        search: EMPTY_SEARCH
       })
     },
 
@@ -584,6 +634,54 @@ export const useEditor = create<EditorState>()((set, get) => {
     setPageTransition: (pageTransition) => set({ pageTransition }),
     requestFit: () => set({ zoom: 0, fitMode: 'page' }), // "화면에 맞춤" = 페이지 전체가 보이게
     pageMoveToIndex: (ids, index) => pageOp((p) => movePagesToIndex(p, ids, index)),
+
+    openSearch: () => set((s) => ({ search: { ...s.search, open: true } })),
+    closeSearch: () => {
+      searchSeq++ // 진행 중인 검색 결과 폐기
+      set({ search: EMPTY_SEARCH })
+    },
+    async setSearchQuery(query) {
+      const seq = ++searchSeq
+      const s = get()
+      set({ search: { ...s.search, query } })
+      const needle = query.trim().toLowerCase()
+      if (!needle) {
+        set((st) => ({ search: { ...st.search, matches: [], matchesByPage: {}, current: -1 } }))
+        return
+      }
+      const matches: SearchMatch[] = []
+      const matchesByPage: Record<string, SearchMatch[]> = {}
+      for (let pageIndex = 0; pageIndex < s.pages.length; pageIndex++) {
+        const page = s.pages[pageIndex]
+        let spans
+        try {
+          spans = await extractTextSpans(page)
+        } catch {
+          continue
+        }
+        if (seq !== searchSeq) return // 더 새 질의가 들어옴
+        for (const sp of spans) {
+          const hay = sp.text.toLowerCase()
+          const len = hay.length
+          let from = 0
+          while (from <= len - needle.length) {
+            const at = hay.indexOf(needle, from)
+            if (at < 0) break
+            // 글자 폭이 균일하다고 가정하고 스팬 rect 를 오프셋 비율로 자른다 (근사)
+            const rect = { x: sp.rect.x + (sp.rect.w * at) / len, y: sp.rect.y, w: (sp.rect.w * needle.length) / len, h: sp.rect.h }
+            const m: SearchMatch = { pageId: page.id, pageIndex, rect }
+            matches.push(m)
+            ;(matchesByPage[page.id] ??= []).push(m)
+            from = at + needle.length
+          }
+        }
+      }
+      if (seq !== searchSeq) return
+      set((st) => ({ search: { ...st.search, matches, matchesByPage, current: matches.length ? 0 : -1 } }))
+      if (matches.length && matches[0].pageIndex !== get().currentPage) get().requestScrollTo(matches[0].pageIndex)
+    },
+    searchNext: () => stepSearch(1),
+    searchPrev: () => stepSearch(-1),
 
     undo: () => step(hUndo),
     redo: () => step(hRedo),

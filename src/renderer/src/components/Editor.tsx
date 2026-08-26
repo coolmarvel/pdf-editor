@@ -13,6 +13,7 @@ import SubToolbar from './SubToolbar'
 import ThumbnailSidebar from './ThumbnailSidebar'
 import PagesView from './PagesView'
 import FloatingPager from './FloatingPager'
+import SearchBar from './SearchBar'
 import ManagePagesDialog from './ManagePagesDialog'
 import StampDialog from './StampDialog'
 import SignDialog from './SignDialog'
@@ -42,12 +43,17 @@ export default function Editor(): JSX.Element {
     useEditor.getState().setNotice(null)
   }, [notice])
 
-  // 키보드: Ctrl+Z/Y, Delete
+  // 키보드: Ctrl+Z/Y, Delete, Ctrl+F(검색)
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
       const s = useEditor.getState()
       const inEditable = (e.target as HTMLElement)?.tagName === 'TEXTAREA' || (e.target as HTMLElement)?.tagName === 'INPUT'
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !inEditable) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        // 입력창 안에서도 가로챈다 — 브라우저 기본 찾기 대신 우리 검색 바 (이미 열려 있으면 포커스만)
+        e.preventDefault()
+        s.openSearch()
+        ;(document.querySelector('[data-testid="search-input"]') as HTMLInputElement | null)?.focus()
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !inEditable) {
         e.preventDefault()
         if (e.shiftKey) s.redo()
         else s.undo()
@@ -124,6 +130,7 @@ export default function Editor(): JSX.Element {
       <Box sx={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative' }}>
         {sidebarOpen && <ThumbnailSidebar onManagePages={() => setManagePagesOpen(true)} />}
         <PagesView />
+        <SearchBar />
         <FloatingPager />
       </Box>
 

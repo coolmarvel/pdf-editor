@@ -1,7 +1,7 @@
 ---
 title: 세션 로그
 created: 2026-07-08
-updated: 2026-08-25
+updated: 2026-08-26
 domain: development
 ---
 
@@ -9,6 +9,22 @@ domain: development
 
 이 파일이 **"언제 무슨 일이 있었나"의 SSOT**다. 세션마다 최상단에 블록 추가.
 (2026-07-08부터 git 에 올리지만 커밋/푸시는 사용자가 직접·성긴 단위 — git history 를 이력 SSOT 로 삼지 않는다.)
+
+## 2026-08-26 — v1.5.6: 문서 텍스트 검색 (pdfguru Search 파리티)
+
+**요청**: guru 의 Search(특정 텍스트 검색·하이라이트) 기능을 데스크톱과 웹 양쪽에. (스크린샷은 pdf-editor-live 쪽 `docs/feedback-archive/2026-08-26-round2/`)
+
+**구현** (에이전트 병렬 작업 중 데스크톱 담당분):
+- 상단바 검색 버튼(`data-testid="search-button"`) + **Ctrl/Cmd+F**(입력창 안에서도 가로챔) → 페이지 영역 우상단에 `SearchBar`
+  (입력·`n / m`·이전/다음·닫기, Enter=다음, Shift+Enter=이전, Esc=닫기, 150ms 디바운스)
+- 스토어 `search:{open,query,matches,matchesByPage,current}` + `openSearch/closeSearch/setSearchQuery/searchNext/searchPrev`.
+  전체 페이지의 `extractTextSpans`(캐시됨)에서 대소문자 무시 부분일치, 스팬 내 글자 오프셋 비례로 rect 근사.
+  다음/이전은 wrap-around, 페이지가 바뀌면 `requestScrollTo`. `searchSeq` 로 늦게 온 결과 폐기. 문서 닫으면 초기화.
+- `PageCanvas` 는 `matchesByPage[page.id]` 안정 참조로만 구독 → 노랑(현재 항목 주황) DOM 박스, pointer-events 없음.
+- `e2e/search-check.cjs` 신설: 2페이지 "orange"×6 → `1 / 6`, 박스 6개, 다음 3회 → 페이지 2·`4 / 6`, wrap, 결과 없음, Esc, Ctrl+F.
+
+**검증**: typecheck ✅ · test ✅ · build ✅ · search-check ✅ · visual-check ✅ → `PDF편집기-Setup-1.5.6.exe` 바탕화면.
+**웹 반영**: 변경 파일(store·PageCanvas·TopBar·icons·i18n·SearchBar·Editor 의 Ctrl+F/마운트 2줄)을 `~/pdf-editor-live/packages/editor` 에 복사.
 
 ## 2026-08-25 (3) — v1.5.5: 동작 보존 리팩토링 (죽은 코드·중복·성능) + 웹 전환 복사본 분기
 

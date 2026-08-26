@@ -9,7 +9,7 @@ import Tooltip from '@mui/material/Tooltip'
 import CircularProgress from '@mui/material/CircularProgress'
 import { useEditor } from '@renderer/store/editor'
 import { useT } from '@renderer/i18n'
-import { Check, Download, FileText, Pencil, Printer } from './icons'
+import { Check, Download, FileText, Pencil, Printer, Search } from './icons'
 
 export interface TopBarProps {
   busy: boolean
@@ -22,6 +22,7 @@ export default function TopBar({ busy, onPrint, onDownload, onDone }: TopBarProp
   const t = useT()
   const fileName = useEditor((s) => s.fileName)
   const setFileName = useEditor((s) => s.setFileName)
+  const openSearch = useEditor((s) => s.openSearch)
   const [renaming, setRenaming] = useState(false)
 
   return (
@@ -61,6 +62,11 @@ export default function TopBar({ busy, onPrint, onDownload, onDone }: TopBarProp
       <Box sx={{ flex: 1 }} />
 
       {busy && <CircularProgress size={20} />}
+      <Tooltip title={t('search')}>
+        <IconButton onClick={openSearch} data-testid="search-button">
+          <Search />
+        </IconButton>
+      </Tooltip>
       <Tooltip title={t('print')}>
         <span>
           <IconButton disabled={busy} onClick={onPrint}>

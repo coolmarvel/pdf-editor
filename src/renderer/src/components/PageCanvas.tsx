@@ -16,7 +16,7 @@ import type { RenderTask } from 'pdfjs-dist'
 import { renderPage, extractTextSpans, type TextSpan } from '@renderer/pdf/docs'
 import { drawObjects, fontCss, measureTextWidthPx, effectiveBlend } from '@renderer/editor/draw'
 import { cachedImage, preloadImage } from '@renderer/editor/canvasUtil'
-import { useEditor } from '@renderer/store/editor'
+import { useEditor, type SearchMatch } from '@renderer/store/editor'
 import { useT } from '@renderer/i18n'
 import { Trash2 } from './icons'
 
@@ -81,6 +81,10 @@ const SPAN_SX = {
   bgcolor: 'rgba(14,116,144,.07)',
   pointerEvents: 'none'
 } as const
+
+/** 검색 일치 하이라이트 (반투명 노랑) · 현재 일치는 주황 — 클릭을 막지 않는다 */
+const SEARCH_SX = { position: 'absolute', bgcolor: 'rgba(250,204,21,.45)', pointerEvents: 'none', borderRadius: '2px' } as const
+const SEARCH_CUR_SX = { ...SEARCH_SX, bgcolor: 'rgba(251,146,60,.6)' } as const
 
 /** 정규화 rect → left/top/width/height 퍼센트 (padPx 만큼 사방으로 키움) */
 function rectSx(r: Rect, padPx = 0): { left: string; top: string; width: string; height: string } {
@@ -213,6 +217,9 @@ function PageCanvas({ page, zoom }: Props): JSX.Element {
   const markHistory = useEditor((s) => s.markHistory)
   const markStyle = useEditor((s) => s.markStyle)
   const setPendingImage = useEditor((s) => s.setPendingImage)
+  // 검색: 이 페이지의 일치만 구독 (store 가 페이지별로 미리 묶어둔 배열 → 참조 안정, 다른 페이지 결과엔 무반응)
+  const searchMatches = useEditor((s) => s.search.matchesByPage[page.id] ?? EMPTY_MATCHES)
+  const currentMatch = useEditor((s) => s.search.matches[s.search.current])
 
   const cssW = size.w * zoom
   const cssH = size.h * zoom
@@ -421,6 +428,15 @@ function PageCanvas({ page, zoom }: Props): JSX.Element {
   const spanBoxes = useMemo(
     () => freeSpans?.map((sp, i) => <Box key={i} sx={{ ...SPAN_SX, ...rectSx(sp.rect) }} />) ?? null,
     [freeSpans]
+  )
+  const searchBoxes = useMemo(
+    () =>
+      searchMatches.length === 0
+        ? null
+        : searchMatches.map((m, i) => (
+            <Box key={i} data-testid={m === currentMatch ? 'search-hit-current' : 'search-hit'} sx={{ ...(m === currentMatch ? SEARCH_CUR_SX : SEARCH_SX), ...rectSx(m.rect) }} />
+          )),
+    [searchMatches, currentMatch]
   )
 
   const norm = (e: React.PointerEvent): [number, number] => {
@@ -973,6 +989,8 @@ function PageCanvas({ page, zoom }: Props): JSX.Element {
 
       {/* editText 스팬 하이라이트 (이미 수정 객체가 덮은 스팬은 제외) */}
       {tool === 'editText' && spanBoxes}
+      {/* 검색 일치 하이라이트 */}
+      {searchBoxes}
 
       {/* 선택 외곽선 + 핸들 (점 6개 + 텍스트는 회전 점 1개).
           zIndex 6: 인터랙션 레이어(형제, DOM 뒤)가 핸들 클릭을 가로채지 않도록 위로 올린다 */}
@@ -1197,6 +1215,7 @@ function PageCanvas({ page, zoom }: Props): JSX.Element {
 export default memo(PageCanvas)
 
 const EMPTY: PageObject[] = []
+const EMPTY_MATCHES: SearchMatch[] = []
 
 /** 객체를 dx,dy 만큼 이동한 patch. text 는 위치만(폭·높이 유지), editText 는 cover(원본 가림)를 남기고 box 만 */
 function moveObject(o: PageObject, dx: number, dy: number): Partial<PageObject> {
