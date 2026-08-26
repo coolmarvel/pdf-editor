@@ -10,6 +10,18 @@ domain: development
 이 파일이 **"언제 무슨 일이 있었나"의 SSOT**다. 세션마다 최상단에 블록 추가.
 (2026-07-08부터 git 에 올리지만 커밋/푸시는 사용자가 직접·성긴 단위 — git history 를 이력 SSOT 로 삼지 않는다.)
 
+## 2026-08-26 (2) — v1.5.7: 페이지 관리 모달 한 줄 툴바·확대, 사이드바 리사이즈 시 페이지 재맞춤, 임시본 직렬화 API
+
+**요청**(웹 3차 피드백 중 공용 에디터 해당분): 페이지 관리 모달 툴바가 줄바꿈됨 → 크기 키우고 한 줄로. 사이드바를 넓히면 PDF 를 침범 → 최대 폭 제한 + 여백 고정하고 PDF 가 줄어들게.
+웹의 "임시 저장/이어서 작업하기"를 위해 스토어 직렬화 API 필요.
+
+- `ManagePagesDialog`: `maxWidth="xl"`, `min(1400px, 94vw)` × `min(860px, 90vh)`, 툴바 `nowrap` + 가로 스크롤 폴백, 버튼 36px. 1280×800·1600×900 에서 한 줄 확인.
+- `ThumbnailSidebar`: 최대 폭 `min(480px, 창의 40%)`. `PagesView`: `GUTTER_X=32` 를 fit 계산과 패딩이 공유, 컨테이너 `ResizeObserver` 로 폭이 바뀌면 재맞춤(수동 줌 중이면 손대지 않음), 넓은 행이 왼쪽으로 잘리지 않게 `fit-content + mx:auto`.
+- 임시본: `EditorDraft{version:1,fileName,pages,objectsByPage,displaySizes,docs(docId→bytes),zoom,currentPage}`, `serializeDraft()`/`restoreDraft()`, `docs.ts registerDoc(bytes, id?)`·`getAllDocBytes()`, `core/draft.ts` 순수 헬퍼(+테스트 4). `window.__editor = useEditor` 노출(e2e·웹). 데스크톱 자체의 자동 저장/복구(todo P4)는 이 API 위에 얹으면 됨.
+- `e2e/draft-check.cjs` 신설(모달 한 줄·사이드바 캡/재맞춤/여백/오버플로 없음·임시본 왕복).
+
+**검증**: typecheck ✅ · test 25/25 ✅ · build ✅ · visual/pages/search/draft-check 4종 ✅ → `PDF편집기-Setup-1.5.7.exe` 바탕화면. 변경 파일은 `~/pdf-editor-live/packages/editor` 에 복사됨.
+
 ## 2026-08-26 — v1.5.6: 문서 텍스트 검색 (pdfguru Search 파리티)
 
 **요청**: guru 의 Search(특정 텍스트 검색·하이라이트) 기능을 데스크톱과 웹 양쪽에. (스크린샷은 pdf-editor-live 쪽 `docs/feedback-archive/2026-08-26-round2/`)

@@ -65,8 +65,29 @@ export default function ManagePagesDialog({ open, onClose }: { open: boolean; on
   })
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg" PaperProps={{ sx: { height: '86vh' } }}>
-      <Stack direction="row" alignItems="center" spacing={0.5} sx={{ px: 2, py: 1, borderBottom: 1, borderColor: 'divider', flexWrap: 'wrap' }}>
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="xl" PaperProps={{ sx: { width: 'min(1400px, 94vw)', maxWidth: 'none', height: 'min(860px, 90vh)' } }}>
+      {/* 툴바는 한 줄 고정(2026-08-26 피드백: 1200px 폭에서 두 줄로 꺾였다). 폭이 모자라면 줄바꿈 대신 가로 스크롤 */}
+      <Stack
+        direction="row"
+        alignItems="center"
+        spacing={0.25}
+        sx={{
+          px: 1.5,
+          py: 1,
+          borderBottom: 1,
+          borderColor: 'divider',
+          flexWrap: 'nowrap',
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          scrollbarWidth: 'thin',
+          '&::-webkit-scrollbar': { height: 6 },
+          '&::-webkit-scrollbar-thumb': { bgcolor: 'rgba(0,0,0,.2)', borderRadius: 3 },
+          '& > .MuiButton-root': { flexShrink: 0, whiteSpace: 'nowrap', fontSize: 14, px: 0.75, minHeight: 36, minWidth: 0 },
+          '& > .MuiButton-root .MuiSvgIcon-root': { fontSize: 20 },
+          '& .MuiIconButton-root': { width: 36, height: 36 },
+          '& .MuiIconButton-root .MuiSvgIcon-root': { fontSize: 20 }
+        }}
+      >
         <Button size="small" color="inherit" startIcon={<Plus />} onClick={() => pageInsertBlank(pages.length)}>
           {t('newPage')}
         </Button>
@@ -95,7 +116,7 @@ export default function ManagePagesDialog({ open, onClose }: { open: boolean; on
           {t('importImages')}
         </Button>
         {inputs}
-        <Box sx={{ flex: 1 }} />
+        <Box sx={{ flex: 1, minWidth: 8 }} />
         <Tooltip title={t('undo')}>
           <span>
             <IconButton size="small" disabled={!canUndo} onClick={() => undo()}>

@@ -20,8 +20,9 @@ import type { PageObject, ObjectId, DashStyle, BlendMode } from '@core/objects'
 import { newId, rotateObjectCW } from '@core/objects'
 import type { History } from '@core/history'
 import { emptyHistory, push, undo as hUndo, redo as hRedo } from '@core/history'
-import { registerDoc, getDisplaySize, clearDocs, extractTextSpans } from '@renderer/pdf/docs'
+import { registerDoc, getDisplaySize, clearDocs, extractTextSpans, getAllDocBytes } from '@renderer/pdf/docs'
 import { imageFilesToPdfBytes, A4 } from '@renderer/pdf/imageToPdf'
+import { collectDraftDocs, clampPage } from '@core/draft'
 
 export type Tool =
   | 'select'
@@ -119,6 +120,23 @@ interface Snapshot {
 
 export type Phase = 'landing' | 'loading' | 'editor'
 
+/**
+ * 임시 저장(draft) 직렬화 형식 — 편집 중인 문서를 통째로 담아 나중에 그대로 복원한다.
+ * docs 에는 pages 가 참조하는 모든 소스 문서 바이트(원본 docId 유지, 'blank' 제외)를 담는다.
+ * 웹 앱과 공유하는 계약이므로 필드 구조를 바꾸면 version 을 올린다.
+ */
+export interface EditorDraft {
+  version: 1
+  fileName: string
+  pages: PageRef[]
+  objectsByPage: Record<string, PageObject[]>
+  displaySizes: Record<string, { w: number; h: number }>
+  /** docId → 소스 바이트 (pages 가 참조하는 docId 전부, 'blank' 제외) */
+  docs: Record<string, Uint8Array>
+  zoom: number
+  currentPage: number
+}
+
 export type Lang = 'ko' | 'en'
 /** 페이지 모드: 한 쪽씩 / 두 쪽 나란히 */
 export type PageMode = 'single' | 'double'
@@ -196,6 +214,10 @@ interface EditorState {
 
   openDocument(name: string, bytes: Uint8Array, onProgress?: (p: number) => void): Promise<void>
   closeDocument(): void
+  /** 임시 저장용 직렬화. 편집 화면이 아니면 throw */
+  serializeDraft(): EditorDraft
+  /** 임시 저장 복원 — 소스 문서를 원래 docId 로 다시 등록하고 상태를 통째로 되살린다 (히스토리는 비움) */
+  restoreDraft(d: EditorDraft): Promise<void>
   setFileName(n: string): void
   setNotice(n: EditorState['notice']): void
   setTool(t: Tool): void
@@ -481,6 +503,53 @@ export const useEditor = create<EditorState>()((set, get) => {
         currentPage: 0,
         zoom: 0,
         search: EMPTY_SEARCH
+      })
+    },
+
+    serializeDraft() {
+      const s = get()
+      if (s.phase !== 'editor') throw new Error('serializeDraft: not in editor phase')
+      // pages 가 실제로 참조하는 문서만 담는다 (삭제된 가져오기 문서는 버린다)
+      const docs = collectDraftDocs(s.pages, getAllDocBytes())
+      return {
+        version: 1,
+        fileName: s.fileName,
+        pages: s.pages,
+        objectsByPage: s.objectsByPage,
+        displaySizes: s.displaySizes,
+        docs,
+        zoom: s.zoom,
+        currentPage: s.currentPage
+      }
+    },
+
+    async restoreDraft(d) {
+      set({ phase: 'loading', loadingProgress: 5, fileName: d.fileName })
+      clearDocs()
+      const ids = Object.keys(d.docs)
+      for (let i = 0; i < ids.length; i++) {
+        await registerDoc(d.docs[ids[i]], ids[i])
+        set({ loadingProgress: 10 + Math.round(((i + 1) / ids.length) * 80) })
+      }
+      // displaySizes 는 draft 값을 신뢰하되, 빠진 페이지만 다시 계산 (구버전 draft 방어)
+      const displaySizes = { ...d.displaySizes }
+      for (const p of d.pages) if (!displaySizes[p.id]) displaySizes[p.id] = await getDisplaySize(p)
+      set({
+        pages: d.pages,
+        objectsByPage: d.objectsByPage,
+        displaySizes,
+        history: emptyHistory<Snapshot>(),
+        selected: null,
+        pendingImage: null,
+        currentPage: clampPage(d.currentPage, d.pages.length),
+        zoom: d.zoom,
+        loadingProgress: 100,
+        phase: 'editor',
+        tool: 'select',
+        search: EMPTY_SEARCH,
+        editTextSnapshot: null,
+        editTextExitPrompt: null,
+        deletePrompt: null
       })
     },
 
@@ -775,3 +844,11 @@ export const useEditor = create<EditorState>()((set, get) => {
     }
   }
 })
+
+// E2E/디버깅용 전역 노출 — 렌더러 밖(Playwright evaluate)에서 store 에 접근할 유일한 통로. 부작용 없음
+declare global {
+  interface Window {
+    __editor?: typeof useEditor
+  }
+}
+if (typeof window !== 'undefined') window.__editor = useEditor

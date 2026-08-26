@@ -18,7 +18,10 @@ import ThumbCanvas from './ThumbCanvas'
 import MenuAction from './ui/MenuAction'
 
 const MIN_W = 150
-const MAX_W = 420
+/** 사이드바 최대 폭: 480px 또는 창 폭의 40% 중 작은 쪽 — 페이지 영역이 너무 좁아져 PDF 가 잘려 보이는 것을 막는다 (2026-08-26 피드백) */
+function maxSidebarW(): number {
+  return Math.min(480, Math.floor(window.innerWidth * 0.4))
+}
 
 /** 페이지 사이 실선 + ⊕ (호버 시 진해짐). highlighted = 드롭 삽입점 (보라 선) */
 function Gap({ index, highlighted, onAdd }: { index: number; highlighted: boolean; onAdd: (anchor: HTMLElement, index: number) => void }): JSX.Element {
@@ -131,7 +134,7 @@ export default function ThumbnailSidebar({ onManagePages }: { onManagePages: () 
 
   const [width, setWidth] = useState(() => {
     const saved = Number(localStorage.getItem('sidebarW'))
-    return saved >= MIN_W && saved <= MAX_W ? saved : 208
+    return saved >= MIN_W && saved <= maxSidebarW() ? saved : 208
   })
   /** ⋮ 메뉴 */
   const [pageMenu, setPageMenu] = useState<{ anchor: HTMLElement; index: number } | null>(null)
@@ -154,11 +157,12 @@ export default function ThumbnailSidebar({ onManagePages }: { onManagePages: () 
     e.preventDefault()
     const startX = e.clientX
     const startW = width
+    const maxW = maxSidebarW()
     const onMove = (ev: PointerEvent): void => {
-      setWidth(Math.max(MIN_W, Math.min(MAX_W, startW + ev.clientX - startX)))
+      setWidth(Math.max(MIN_W, Math.min(maxW, startW + ev.clientX - startX)))
     }
     const onUp = (ev: PointerEvent): void => {
-      const w = Math.max(MIN_W, Math.min(MAX_W, startW + ev.clientX - startX))
+      const w = Math.max(MIN_W, Math.min(maxW, startW + ev.clientX - startX))
       localStorage.setItem('sidebarW', String(w))
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerup', onUp)
@@ -191,7 +195,7 @@ export default function ThumbnailSidebar({ onManagePages }: { onManagePages: () 
   const thumbW = Math.ceil((width * Math.min(window.devicePixelRatio || 1, 2)) / 64) * 64
 
   return (
-    <Box sx={{ position: 'relative', width, flexShrink: 0, borderRight: 1, borderColor: 'divider', bgcolor: ui.surface.sidebar, display: 'flex', flexDirection: 'column' }}>
+    <Box data-sidebar sx={{ position: 'relative', width, flexShrink: 0, borderRight: 1, borderColor: 'divider', bgcolor: ui.surface.sidebar, display: 'flex', flexDirection: 'column' }}>
       <Box ref={listRef} sx={{ flex: 1, overflowY: 'auto', p: 1.5, pt: 1.5 }}>
         <Button fullWidth size="small" variant="outlined" color="inherit" startIcon={<LayoutGrid />} onClick={onManagePages} sx={{ mb: 0.5 }}>
           {t('managePages')}

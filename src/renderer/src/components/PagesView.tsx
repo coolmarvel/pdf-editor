@@ -4,6 +4,9 @@ import { useEditor } from '@renderer/store/editor'
 import { ui } from '@renderer/theme'
 import PageCanvas from './PageCanvas'
 
+/** 페이지 영역 좌우 고정 여백(px) — fit 계산과 실제 padding 이 같은 값을 써야 폭 맞춤에서 가로 스크롤이 생기지 않는다 */
+const GUTTER_X = 32
+
 /**
  * 페이지 표시 영역.
  * - pageMode: 'single'(1단) | 'double'(두 쪽 나란히)
@@ -27,23 +30,52 @@ export default function PagesView(): JSX.Element {
   const panRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null)
   /** 페이지 세로 중심(컨테이너 스크롤 좌표) 캐시 — 스크롤마다 레이아웃을 강제하지 않기 위해 */
   const midsRef = useRef<number[] | null>(null)
+  /** 마지막으로 fit 계산해서 넣은 zoom — 컨테이너 폭이 바뀌었을 때 "사용자가 직접 줌을 바꾸지 않았다"면 다시 fit 하기 위해 */
+  const fitZoomRef = useRef<number | null>(null)
+
+  /** 컨테이너 크기 기준 fit 배율 계산 (폭 맞춤 = 컨테이너 폭 − 고정 여백) */
+  function computeFit(el: HTMLDivElement): number | null {
+    if (pages.length === 0) return null
+    const first = displaySizes[pages[0].id]
+    if (!first) return null
+    const cols = pageMode === 'double' ? 2 : 1
+    const fitW = (el.clientWidth - GUTTER_X * 2 - (cols - 1) * 16) / (first.w * cols)
+    if (fitMode === 'width') return fitW
+    const fitH = (el.clientHeight - 48) / first.h
+    return Math.min(fitH, fitW)
+  }
 
   // 첫 로드/재-fit(zoom=0): 기본은 폭 맞춤(Guru처럼 꽉 차게), "화면에 맞춤"은 페이지 전체
   useEffect(() => {
     if (zoom > 0 || pages.length === 0) return
     const el = containerRef.current
     if (!el) return
-    const first = displaySizes[pages[0].id]
-    if (!first) return
-    const cols = pageMode === 'double' ? 2 : 1
-    const fitW = (el.clientWidth - 64 - (cols - 1) * 16) / (first.w * cols)
-    if (fitMode === 'width') {
-      setZoom(fitW)
-    } else {
-      const fitH = (el.clientHeight - 48) / first.h
-      setZoom(Math.min(fitH, fitW))
-    }
-  }, [zoom, pages, displaySizes, setZoom, pageMode, fitMode])
+    const z = computeFit(el)
+    if (z === null) return
+    fitZoomRef.current = Math.min(4, Math.max(0.2, z))
+    setZoom(z)
+  })
+
+  // 컨테이너 폭 변화(사이드바 드래그·창 크기·검색바 등) → fit 상태였다면 다시 fit.
+  // window resize 만 듣던 시절엔 사이드바를 넓혀도 페이지가 그대로라 오른쪽이 잘렸다 (2026-08-26 피드백)
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    let lastW = el.clientWidth
+    const ro = new ResizeObserver(() => {
+      if (el.clientWidth === lastW) return
+      lastW = el.clientWidth
+      const s = useEditor.getState()
+      // 사용자가 줌을 손댔으면(현재 zoom ≠ 마지막 fit 값) 건드리지 않는다
+      if (fitZoomRef.current === null || Math.abs(s.zoom - fitZoomRef.current) > 1e-6) return
+      const z = computeFit(el)
+      if (z === null) return
+      fitZoomRef.current = Math.min(4, Math.max(0.2, z))
+      setZoom(z)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  })
 
   // 페이저/썸네일 → 스크롤 요청 소비 (continuous 전용 — paged 는 currentPage 렌더로 충분)
   useEffect(() => {
@@ -137,16 +169,18 @@ export default function PagesView(): JSX.Element {
         overflow: 'auto',
         bgcolor: ui.surface.canvas,
         py: 3,
+        px: `${GUTTER_X}px`,
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center',
+        // alignItems:center 는 컨테이너보다 넓은 행의 왼쪽을 스크롤로도 못 닿게 잘라낸다 → 행 쪽 margin:auto 로 가운데 정렬
+        alignItems: 'stretch',
         gap: 3,
         cursor: tool === 'hand' ? 'grab' : undefined
       }}
     >
       {zoom > 0 &&
         rows.map((row) => (
-          <Box key={row.map((r) => pages[r.pageIdx].id).join('-')} sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
+          <Box key={row.map((r) => pages[r.pageIdx].id).join('-')} sx={{ display: 'flex', gap: 2, width: 'fit-content', flexShrink: 0, mx: 'auto' }}>
             {row.map(({ pageIdx }) => (
               <PageCanvas key={pages[pageIdx].id} page={pages[pageIdx]} zoom={zoom} />
             ))}

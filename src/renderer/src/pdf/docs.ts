@@ -8,6 +8,7 @@ import * as pdfjsLib from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import type { PDFDocumentProxy, PageViewport, RenderTask } from 'pdfjs-dist'
 import type { PageRef } from '@core/pages'
+import { bumpDocSeq } from '@core/draft'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
 
@@ -36,12 +37,28 @@ async function pageViewport(ref: PageRef, scale: number): Promise<{ page: pdfjsL
   return { page, vp }
 }
 
-export async function registerDoc(bytes: Uint8Array): Promise<{ docId: string; pageCount: number }> {
+/**
+ * 소스 문서 등록. id 를 주면 그 id 로 등록한다 — 임시 저장(draft) 복원 시 PageRef.docId 가 가리키는
+ * 원래 id 를 그대로 살려야 하기 때문. 이때 내부 시퀀스를 그 숫자 뒤로 건너뛰어, 이후 새로 등록되는
+ * 문서가 복원된 id 와 충돌하지 않게 한다.
+ */
+export async function registerDoc(bytes: Uint8Array, id?: string): Promise<{ docId: string; pageCount: number }> {
   // pdf.js가 버퍼를 detach 하므로 사본을 넘긴다
   const proxy = await pdfjsLib.getDocument({ data: bytes.slice() }).promise
-  const docId = `doc-${++dseq}`
+  if (id) {
+    dseq = bumpDocSeq(dseq, id)
+    void docs.get(id)?.proxy.destroy()
+  }
+  const docId = id ?? `doc-${++dseq}`
   docs.set(docId, { bytes, proxy })
   return { docId, pageCount: proxy.numPages }
+}
+
+/** 등록된 모든 소스 문서의 바이트 (docId → bytes). 임시 저장 직렬화용 */
+export function getAllDocBytes(): Record<string, Uint8Array> {
+  const out: Record<string, Uint8Array> = {}
+  for (const [id, d] of docs) out[id] = d.bytes
+  return out
 }
 
 export function getDocBytes(docId: string): Uint8Array {
