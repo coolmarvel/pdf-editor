@@ -15,12 +15,14 @@ import type { SxProps, Theme } from '@mui/material/styles'
 import { AlignCenter, AlignLeft, AlignRight, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd, AlignVerticalJustifyStart, Baseline, Bold, BookOpen, Contrast, Droplets, Grid3x3, IconChevronDown, ImageIcon, Italic, Layers, Maximize, Minus, PaintBucket, PenLine, Plus, RotateCw, Spline, Trash2, Type, Underline } from './icons'
 import { useEditor, type TextStyle } from '@renderer/store/editor'
 import type { PageObject, TextObj, EditTextObj, ShapeObj, NoteObj, StrokeObj, WatermarkObj, DashStyle, BlendMode } from '@core/objects'
-import { FONT_STACKS, measureTextWidthPx } from '@renderer/editor/draw'
+import { DEFAULT_PAGE_SIZE } from '@core/pages'
+import { FONT_STACKS, measureTextWidthPx, effectiveBlend } from '@renderer/editor/draw'
 import { renderWatermarkText } from '@renderer/editor/watermark'
-import { fileToDataUrl } from '@renderer/editor/stamp'
+import { fileToDataUrl } from '@renderer/editor/canvasUtil'
 import { useT, type I18nKey } from '@renderer/i18n'
 import { ui } from '@renderer/theme'
 import SwatchRow from './ui/SwatchRow'
+import { H_SCROLL_SX, useHorizontalWheel } from '@renderer/hooks/useHorizontalScroll'
 
 /**
  * 컨텍스트 바 (Guru 문법): 컨트롤마다 [의미 아이콘] + [36px 통일 높이 박스] 로 묶고
@@ -53,6 +55,8 @@ const selectSx = {
 /** 박스형 트리거 버튼 공통 스타일 (팔레트/불투명도) */
 const boxBtnSx = {
   height: CTL_H,
+  // 터치: 색/불투명도 트리거를 40px 로(서브툴바 48px 안) — 마우스는 36 그대로
+  '@media (pointer: coarse)': { height: 40 },
   px: 0.8,
   borderRadius: 2,
   border: `1px solid ${ui.gray[300]}`,
@@ -175,7 +179,7 @@ const sizeToPt = (size: number): number => Math.round(size * 842)
 const ptToWidth = (pt: number): number => pt / 595
 const widthToPt = (w: number): number => Math.round(w * 595)
 
-const FONT_SIZES = [8, 10, 12, 14, 16, 18, 24, 32, 40, 56, 72]
+const FONT_SIZES = [6, 8, 10, 12, 14, 16, 18, 24, 32, 40, 56, 72]
 const PEN_WIDTHS = [1, 2, 3, 5, 8, 12, 18, 30]
 
 /** 선 굵기 셀렉트 (≡ 아이콘 + pt 목록, 현재 값 포함 보장) */
@@ -194,18 +198,22 @@ const PALETTE: string[][] = [
 /** 팔레트 스와치: 흰색만 회색 테두리, 선택은 파란 아웃라인 */
 const paletteSwatchSx = (color: string, selected: boolean): SxProps<Theme> => ({
   border: color.toLowerCase() === '#ffffff' ? `1px solid ${ui.gray[300]}` : '1px solid rgba(0,0,0,.08)',
-  outline: selected ? '2px solid #3b82f6' : 'none',
+  outline: selected ? `2px solid ${ui.selection}` : 'none',
   outlineOffset: 1
 })
 
+/** 팔레트 팝오버 견본의 터치 지름(px) */
+const SWATCH_COARSE = 36
+
 /** "없음" 표시 (빨간 사선 원) — onClick 있으면 버튼 */
-function NoneSwatch({ selected, onClick, size = 24 }: { selected?: boolean; onClick?: () => void; size?: number }): JSX.Element {
+function NoneSwatch({ selected, onClick, size = 24, coarseSize }: { selected?: boolean; onClick?: () => void; size?: number; coarseSize?: number }): JSX.Element {
   const sx = {
     width: size,
     height: size,
+    ...(coarseSize ? { '@media (pointer: coarse)': { width: coarseSize, height: coarseSize } } : {}),
     borderRadius: '50%',
     border: `1px solid ${ui.gray[300]}`,
-    outline: selected ? '2px solid #3b82f6' : 'none',
+    outline: selected ? `2px solid ${ui.selection}` : 'none',
     outlineOffset: 1,
     position: 'relative',
     overflow: 'hidden',
@@ -250,6 +258,7 @@ function PaletteControl({ value, onChange, allowNone, title, icon }: PaletteCont
         </ButtonBase>
       </Tooltip>
       <Popover open={!!anchor} anchorEl={anchor} onClose={() => setAnchor(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}>
+        {/* 터치(pointer: coarse): 견본 36px — 이웃 색을 잘못 고르지 않게. 마우스 24px 그대로 */}
         <Box sx={{ p: 1.5 }}>
           <Stack spacing={0.8}>
             {PALETTE.map((row, ri) => (
@@ -259,8 +268,9 @@ function PaletteControl({ value, onChange, allowNone, title, icon }: PaletteCont
                 value={value}
                 onChange={onChange}
                 ripple
+                coarseSize={SWATCH_COARSE}
                 swatchSx={paletteSwatchSx}
-                prefix={ri === PALETTE.length - 1 && allowNone ? <NoneSwatch selected={value === null} onClick={() => onChange(null)} /> : undefined}
+                prefix={ri === PALETTE.length - 1 && allowNone ? <NoneSwatch selected={value === null} coarseSize={SWATCH_COARSE} onClick={() => onChange(null)} /> : undefined}
               />
             ))}
             <Typography variant="caption" color="text.secondary" sx={{ pt: 0.5 }}>
@@ -269,7 +279,7 @@ function PaletteControl({ value, onChange, allowNone, title, icon }: PaletteCont
             <Box>
               <ButtonBase
                 onClick={() => customRef.current?.click()}
-                sx={{ width: 24, height: 24, borderRadius: '50%', border: `1.5px dashed ${ui.gray[400]}`, color: ui.gray[500], position: 'relative' }}
+                sx={{ width: 24, height: 24, borderRadius: '50%', border: `1.5px dashed ${ui.gray[400]}`, color: ui.gray[500], position: 'relative', '@media (pointer: coarse)': { width: SWATCH_COARSE, height: SWATCH_COARSE } }}
               >
                 <Plus sx={{ fontSize: 16 }} />
                 <input
@@ -492,7 +502,7 @@ function ShapeControls({ v, patch, strokeTitle, strokeFallback, fill, opacity }:
 const NOTE_COLORS = ['#facc15', '#fb923c', '#ef4444', '#ec4899', '#3b82f6', '#22c55e']
 const noteSwatchSx = (_: string, selected: boolean): SxProps<Theme> => ({ cursor: 'pointer', border: selected ? `2px solid ${ui.gray[800]}` : '2px solid transparent' })
 
-const MARK_SIZES = [12, 16, 20, 24, 32, 40, 56]
+const MARK_SIZES = [6, 8, 10, 12, 16, 20, 24, 32, 40, 56] // 작은 표(체크박스 칸)용 6~10pt 추가
 const WM_ANGLES = [-90, -45, -30, 0, 30, 45, 90]
 const WM_SIZES = [25, 35, 50, 70, 90] // 페이지 폭 %
 
@@ -527,7 +537,15 @@ function WatermarkToolControls(): JSX.Element {
   const setWs = useEditor((s) => s.setWatermarkStyle)
   const applyWatermark = useEditor((s) => s.applyWatermark)
   const removeAllWatermarks = useEditor((s) => s.removeAllWatermarks)
-  const hasWatermarks = useEditor((s) => Object.values(s.objectsByPage).some((l) => l.some((o) => o.type === 'watermark')))
+  // objectsByPage 참조가 같으면 다시 훑지 않는다 (셀렉터는 모든 set() 마다 불리므로)
+  const wmCache = useRef<{ objects: unknown; has: boolean } | null>(null)
+  const hasWatermarks = useEditor((s) => {
+    const c = wmCache.current
+    if (c && c.objects === s.objectsByPage) return c.has
+    const has = Object.values(s.objectsByPage).some((l) => l.some((o) => o.type === 'watermark'))
+    wmCache.current = { objects: s.objectsByPage, has }
+    return has
+  })
   const fileRef = useRef<HTMLInputElement>(null)
 
   const canApply = ws.mode === 'text' ? !!ws.text.trim() : !!ws.image
@@ -573,7 +591,7 @@ function WatermarkToolControls(): JSX.Element {
                 fontSize: 14.5,
                 outline: 'none',
                 boxShadow: ui.shadow.xs,
-                '&:focus': { borderColor: '#3b82f6' },
+                '&:focus': { borderColor: ui.selection },
                 '&::placeholder': { color: ui.gray[400] }
               }}
             />
@@ -626,12 +644,14 @@ function WatermarkToolControls(): JSX.Element {
   )
 }
 
-export default function SubToolbar(): JSX.Element | null {
+/** overlay: 낮은 화면(높이 < 480, 폰 가로)에서 Editor 가 문서 영역 안에 absolute 로 띄운다 — 도구/선택이 없으면 렌더하지 않는다 */
+export default function SubToolbar({ overlay = false }: { overlay?: boolean } = {}): JSX.Element | null {
   const t = useT()
   const tool = useEditor((s) => s.tool)
   const selected = useEditor((s) => s.selected)
-  const objectsByPage = useEditor((s) => s.objectsByPage)
-  const displaySizes = useEditor((s) => s.displaySizes)
+  // 선택된 객체만 구독한다 — objectsByPage 전체를 구독하면 다른 객체 드래그 매 프레임 바가 재렌더된다
+  const selObj: PageObject | null = useEditor((s) => (s.selected ? (s.objectsByPage[s.selected.pageId]?.find((o) => o.id === s.selected!.objectId) ?? null) : null))
+  const selSize = useEditor((s) => (s.selected ? s.displaySizes[s.selected.pageId] : undefined))
   const textStyle = useEditor((s) => s.textStyle)
   const setTextStyle = useEditor((s) => s.setTextStyle)
   const penStyle = useEditor((s) => s.penStyle)
@@ -647,13 +667,13 @@ export default function SubToolbar(): JSX.Element | null {
   const updateObject = useEditor((s) => s.updateObject)
   const removeObject = useEditor((s) => s.removeObject)
 
-  const selObj: PageObject | null = selected
-    ? (objectsByPage[selected.pageId]?.find((o) => o.id === selected.objectId) ?? null)
-    : null
-
+  // 마우스 환경에서도 가로 스크롤(세로 휠 → 가로). 넘치지 않으면 무시
+  const onWheel = useHorizontalWheel()
   const bar = (children: React.ReactNode): JSX.Element => (
     // height 고정(minHeight 아님): 도구마다 내용 높이가 다르면 페이지가 세로로 튀어 좌표가 어긋난다
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, px: 1.5, borderBottom: 1, borderColor: 'divider', bgcolor: '#fff', height: 52, flexShrink: 0, overflowX: 'auto', overflowY: 'hidden' }}>
+    // 줄바꿈 금지: 폭이 모자라면 가로 스크롤(얇은 스크롤바). 자식은 줄어들지 않는다
+    // overlay(낮은 화면): 문서 영역 위에 absolute 로 얹어 세로 공간을 쓰지 않는다 — 도구/선택이 있을 때만 그린다
+    <Box data-testid="subtoolbar" onWheel={onWheel} sx={{ display: 'flex', alignItems: 'center', gap: 1.2, px: 1.5, borderBottom: 1, borderColor: 'divider', bgcolor: '#fff', height: 48, flexShrink: 0, flexWrap: 'nowrap', ...H_SCROLL_SX, '& > *': { flexShrink: 0 }, '& .MuiSvgIcon-root': { fontSize: 20 }, ...(overlay ? { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 15, boxShadow: 1 } : {}) }}>
       {children}
       {selObj && selected && (
         <>
@@ -682,7 +702,7 @@ export default function SubToolbar(): JSX.Element | null {
         // 글꼴/크기/굵기/기울임 변경은 상자 폭에 영향 → 실측 폭을 다시 저장 (H=1000 기준 정규화)
         if ('font' in p || 'size' in p || 'bold' in p || 'italic' in p) {
           const nt = { ...obj, ...p } as TextObj
-          const sz = displaySizes[selected.pageId] ?? { w: 595, h: 842 }
+          const sz = selSize ?? DEFAULT_PAGE_SIZE
           const wPx = measureTextWidthPx(nt.text, nt.size, nt.font, nt.bold, nt.italic, 1000)
           updateObject(selected.pageId, selected.objectId, { ...p, w: Math.min(1, wPx / (1000 * (sz.w / sz.h))) } as Partial<PageObject>)
           return
@@ -734,7 +754,7 @@ export default function SubToolbar(): JSX.Element | null {
       const patch = (p: Partial<StrokeObj>): void => updateObject(selected.pageId, selected.objectId, p)
       return bar(
         <StrokeControls
-          v={{ ...st, fill: st.fill ?? null, blend: st.blend ?? (st.kind === 'highlight' ? 'multiply' : 'normal') }}
+          v={{ ...st, fill: st.fill ?? null, blend: effectiveBlend(st) }}
           patch={patch}
           widths={[1, 2, 3, 5, 8, 12, 18, 30, 45]}
           colorFallback="#facc15"
@@ -796,7 +816,8 @@ export default function SubToolbar(): JSX.Element | null {
       return bar(hint('hintLink'))
     default:
       // 항상 바를 렌더한다 (pdfguru처럼 서식 줄 상시 표시).
-      // 사라지면 문서 전체가 세로로 튀어(레이아웃 점프) 클릭 위치가 어긋난다
+      // 사라지면 문서 전체가 세로로 튀어(레이아웃 점프) 클릭 위치가 어긋난다. overlay 모드는 레이아웃에 없으므로 숨겨도 안 튄다
+      if (overlay) return null
       return bar(<TextControls v={textStyle} patch={(p) => setTextStyle(p as Partial<TextStyle>)} />)
   }
 }

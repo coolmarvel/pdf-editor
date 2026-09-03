@@ -17,12 +17,17 @@ import {
   insertDocument
 } from '@core/pages'
 import type { PageObject, ObjectId, DashStyle, BlendMode } from '@core/objects'
-import { newId, rotateObjectCW } from '@core/objects'
+import { newId, rotateObjectCW, SIGN_PLACE_W } from '@core/objects'
 import type { History } from '@core/history'
 import { emptyHistory, push, undo as hUndo, redo as hRedo } from '@core/history'
 import { registerDoc, getDisplaySize, clearDocs, extractTextSpans, getAllDocBytes } from '@renderer/pdf/docs'
 import { imageFilesToPdfBytes, A4 } from '@renderer/pdf/imageToPdf'
 import { collectDraftDocs, clampPage } from '@core/draft'
+import { findMatches, type SearchMatch } from '@core/search'
+import { pruneUntouched, objectsChanged } from '@core/editTextSession'
+import { loadSavedSigns, persistSavedSigns } from './signsStorage'
+
+export type { SearchMatch }
 
 export type Tool =
   | 'select'
@@ -78,7 +83,7 @@ export interface ShapeStyle {
   dash: DashStyle
 }
 
-/** X/체크 표시 도구 설정 — 찍기 전에 크기·색을 정한다 (2026-07-10 피드백. 기본 검정) */
+/** X/체크 표시 도구 설정 — 찍기 전에 크기·색을 정한다 (기본 검정) */
 export interface MarkStyle {
   color: string
   /** 마크 폭 = 페이지 폭 대비 비율 */
@@ -142,13 +147,6 @@ export type Lang = 'ko' | 'en'
 export type PageMode = 'single' | 'double'
 /** 페이지 전환: 이어서 스크롤 / 한 장(쌍)씩 보기 */
 export type PageTransition = 'continuous' | 'paged'
-
-/** 문서 텍스트 검색 일치 1건 — rect 는 페이지 정규화 좌표(스팬 rect 를 글자 오프셋 비율로 잘라낸 근사값) */
-export interface SearchMatch {
-  pageId: string
-  pageIndex: number
-  rect: { x: number; y: number; w: number; h: number }
-}
 
 /**
  * 텍스트 검색 상태 (pdfguru 의 상단 검색 바).
@@ -318,57 +316,17 @@ function snap(s: EditorState): Snapshot {
   return { pages: s.pages, objectsByPage: s.objectsByPage, displaySizes: s.displaySizes }
 }
 
-const SAVED_SIGNS_KEY = 'savedSigns'
-
-function loadSavedSigns(): string[] {
-  try {
-    const arr = JSON.parse(localStorage.getItem(SAVED_SIGNS_KEY) ?? '[]')
-    return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === 'string') : []
-  } catch {
-    return []
-  }
-}
-
-function persistSavedSigns(signs: string[]): void {
-  try {
-    localStorage.setItem(SAVED_SIGNS_KEY, JSON.stringify(signs))
-  } catch {
-    // 용량 초과 등 — 저장 실패해도 세션 내 목록은 유지
-  }
-}
-
-const rectEq = (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }): boolean =>
-  a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h
-
-/** 세션 중 "손대지 않은" editText(원문 그대로·제자리) 제거 — 스팬 클릭만 하고 만 경우 */
-function pruneUntouched(objectsByPage: Record<string, PageObject[]>): Record<string, PageObject[]> {
-  const out: Record<string, PageObject[]> = {}
-  for (const [k, list] of Object.entries(objectsByPage)) {
-    out[k] = list.filter((o) => !(o.type === 'editText' && o.text === o.origText && rectEq(o.box, o.cover)))
-  }
-  return out
-}
-
 /** 배열에서 id 가 일치하는 객체 하나에 patch 를 덮어쓴 새 배열 */
 function patchIn(list: PageObject[], id: ObjectId, patch: Partial<PageObject>): PageObject[] {
   return list.map((o) => (o.id === id ? ({ ...o, ...patch } as PageObject) : o))
 }
 
+/** 내보내기 파일명 — 열린 문서 이름(없으면 'document') + 접미사 + .pdf. 저장/인쇄/페이지 추출 공용 */
+export const exportFileName = (suffix = ''): string => `${useEditor.getState().fileName || 'document'}${suffix}.pdf`
+
 /** undo/redo 가능 여부 셀렉터 — 텍스트 수정 세션 중엔 히스토리가 얼어 둘 다 false (Toolbar·ManagePagesDialog 공용) */
 export const selectCanUndo = (s: EditorState): boolean => s.history.past.length > 0 && !s.editTextSnapshot
 export const selectCanRedo = (s: EditorState): boolean => s.history.future.length > 0 && !s.editTextSnapshot
-
-/** 두 objectsByPage 가 실질적으로 다른가 (페이지 배열 원소 identity 비교) */
-function objectsChanged(a: Record<string, PageObject[]>, b: Record<string, PageObject[]>): boolean {
-  const keys = new Set([...Object.keys(a), ...Object.keys(b)])
-  for (const k of keys) {
-    const la = a[k] ?? []
-    const lb = b[k] ?? []
-    if (la.length !== lb.length) return true
-    for (let i = 0; i < la.length; i++) if (la[i] !== lb[i]) return true
-  }
-  return false
-}
 
 export const useEditor = create<EditorState>()((set, get) => {
   /** 변경 전 스냅샷을 히스토리에 쌓고 패치 적용. 텍스트 수정 세션 중엔 히스토리 없이(버퍼) 적용 */
@@ -452,6 +410,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     currentPage: 0,
     scrollTo: null,
     zoom: 0,
+    // 데스크톱 기본 한국어: localStorage('lang') 에 'en' 이 저장돼 있을 때만 영어
     lang: (localStorage.getItem('lang') as Lang) === 'en' ? 'en' : 'ko',
     pageMode: 'single',
     pageTransition: 'continuous',
@@ -583,7 +542,7 @@ export const useEditor = create<EditorState>()((set, get) => {
       }
       if (save) {
         set({
-          history: push(s.history, { pages: s.pages, objectsByPage: snap0, displaySizes: s.displaySizes }),
+          history: push(s.history, { ...snap(s), objectsByPage: snap0 }),
           objectsByPage: pruneUntouched(s.objectsByPage),
           tool: nextTool,
           selected: null,
@@ -603,7 +562,7 @@ export const useEditor = create<EditorState>()((set, get) => {
       set({
         objectsByPage: {
           ...s.objectsByPage,
-          [p.pageId]: list.map((o) => (o.id === p.objectId ? ({ ...o, text: '' } as PageObject) : o))
+          [p.pageId]: patchIn(list, p.objectId, { text: '' } as Partial<PageObject>)
         },
         selected: null,
         deletePrompt: null
@@ -665,7 +624,7 @@ export const useEditor = create<EditorState>()((set, get) => {
       const page = s.pages[s.currentPage]
       const size = page ? s.displaySizes[page.id] : undefined
       if (!page || !size) return
-      const wN = 0.28 // PageCanvas 클릭 배치와 동일한 기본 폭
+      const wN = SIGN_PLACE_W // PageCanvas 클릭 배치와 동일한 기본 폭
       const hN = (wN * size.w) / aspect / size.h
       // 페이지 밖으로 나가지 않게 중심 클램프
       const cx = Math.min(1 - wN / 2, Math.max(wN / 2, at?.x ?? 0.5))
@@ -729,20 +688,10 @@ export const useEditor = create<EditorState>()((set, get) => {
           continue
         }
         if (seq !== searchSeq) return // 더 새 질의가 들어옴
-        for (const sp of spans) {
-          const hay = sp.text.toLowerCase()
-          const len = hay.length
-          let from = 0
-          while (from <= len - needle.length) {
-            const at = hay.indexOf(needle, from)
-            if (at < 0) break
-            // 글자 폭이 균일하다고 가정하고 스팬 rect 를 오프셋 비율로 자른다 (근사)
-            const rect = { x: sp.rect.x + (sp.rect.w * at) / len, y: sp.rect.y, w: (sp.rect.w * needle.length) / len, h: sp.rect.h }
-            const m: SearchMatch = { pageId: page.id, pageIndex, rect }
-            matches.push(m)
-            ;(matchesByPage[page.id] ??= []).push(m)
-            from = at + needle.length
-          }
+        const found = findMatches(page.id, pageIndex, spans, needle)
+        if (found.length) {
+          matches.push(...found)
+          matchesByPage[page.id] = found
         }
       }
       if (seq !== searchSeq) return

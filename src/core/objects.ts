@@ -47,9 +47,15 @@ export interface TextObj extends BaseObj {
   rotation: number
 }
 
+/** 텍스트 줄간격(em) — 캔버스 렌더·상자 높이·인라인 편집기 line-height 가 같은 값을 써야 글자가 겹친다 */
+export const TEXT_LINE_HEIGHT = 1.25
+/** 클릭 배치 시 기본 폭(페이지 폭 비율): 서명 / 이미지·스탬프 */
+export const SIGN_PLACE_W = 0.28
+export const IMAGE_PLACE_W = 0.32
+
 /** 텍스트 내용(줄 수) 기준 최소 상자 높이(정규화) */
 export function textContentHeight(t: Pick<TextObj, 'text' | 'size'>): number {
-  return t.size * 1.25 * Math.max(1, t.text.split('\n').length)
+  return t.size * TEXT_LINE_HEIGHT * Math.max(1, t.text.split('\n').length)
 }
 
 /** Edit Text — 원본 텍스트를 흰 상자로 덮고 새 텍스트를 그린다 */

@@ -5,9 +5,11 @@
  * 레벨 맵에 둔다(직렬화 불가능한 큰 객체를 zustand 밖으로 격리).
  */
 import * as pdfjsLib from 'pdfjs-dist'
+import { matchFontFamily } from '@renderer/editor/draw'
+import { clearImageCache } from '@renderer/editor/canvasUtil'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import type { PDFDocumentProxy, PageViewport, RenderTask } from 'pdfjs-dist'
-import type { PageRef } from '@core/pages'
+import { DEFAULT_PAGE_SIZE, type PageRef } from '@core/pages'
 import { bumpDocSeq } from '@core/draft'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
@@ -22,11 +24,10 @@ let dseq = 0
 /** 텍스트 스팬 추출 결과 캐시 — (docId, pageIndex, extraRotation) 의 순수 함수라 문서가 살아있는 동안 재사용 */
 const spanCache = new Map<string, Promise<TextSpan[]>>()
 
-const DEFAULT_BLANK = { w: 595, h: 842 }
 
 /** 빈 페이지의 표시 크기(pt) — 사용자 회전이 90/270 이면 가로세로 교환 */
 function blankSizeOf(ref: PageRef): { w: number; h: number } {
-  const { w, h } = ref.blankSize ?? DEFAULT_BLANK
+  const { w, h } = ref.blankSize ?? DEFAULT_PAGE_SIZE
   return ref.extraRotation % 180 === 0 ? { w, h } : { w: h, h: w }
 }
 
@@ -67,10 +68,12 @@ export function getDocBytes(docId: string): Uint8Array {
   return d.bytes
 }
 
+/** 문서 단위 자원 전부 해제: pdf.js 프록시·스팬 캐시·이미지 디코드 캐시 */
 export function clearDocs(): void {
   for (const d of docs.values()) void d.proxy.destroy()
   docs.clear()
   spanCache.clear()
+  clearImageCache()
 }
 
 /** 표시 기준 페이지 크기 (pt). 소스 자체 회전 + 사용자 추가 회전 반영 */
@@ -123,6 +126,10 @@ export interface TextSpan {
   text: string
   /** 글자 크기 (페이지 높이 대비 비율) */
   size: number
+  /** 원본 서체를 우리 폰트 목록 키로 매핑한 값 — 텍스트 수정 시 승계 */
+  font?: string
+  bold?: boolean
+  italic?: boolean
 }
 
 /** Edit Text용: 페이지의 텍스트 스팬을 표시 공간 정규화 좌표로 추출 */
@@ -142,6 +149,19 @@ export function extractTextSpans(ref: PageRef): Promise<TextSpan[]> {
 async function computeTextSpans(ref: PageRef): Promise<TextSpan[]> {
   const { page, vp } = await pageViewport(ref, 1)
   const content = await page.getTextContent()
+  // 폰트 객체(이름·굵게·기울임)는 렌더/오퍼레이터 목록을 만든 뒤에야 commonObjs 에 실린다 — 없으면 한 번 만들어 채운다
+  const fontNames = new Set(content.items.map((it) => ('fontName' in it ? it.fontName : '')).filter(Boolean))
+  if ([...fontNames].some((n) => !page.commonObjs.has(n))) await page.getOperatorList().catch(() => undefined)
+  const fontOf = (name: string): { font: string; bold: boolean; italic: boolean } => {
+    const generic = content.styles[name]?.fontFamily
+    const f = page.commonObjs.has(name) ? (page.commonObjs.get(name) as { name?: string; bold?: boolean; italic?: boolean; fallbackName?: string } | null) : null
+    const pdfName = f?.name ?? ''
+    return {
+      font: matchFontFamily(pdfName, f?.fallbackName ?? generic),
+      bold: f?.bold ?? /bold|black|heavy/i.test(pdfName),
+      italic: f?.italic ?? /italic|oblique/i.test(pdfName)
+    }
+  }
   const spans: TextSpan[] = []
   for (const item of content.items) {
     if (!('str' in item) || !item.str.trim()) continue
@@ -163,7 +183,8 @@ async function computeTextSpans(ref: PageRef): Promise<TextSpan[]> {
     spans.push({
       rect: { x: minX / vp.width, y: minY / vp.height, w: w / vp.width, h: h / vp.height },
       text: item.str,
-      size: fontH / vp.height
+      size: fontH / vp.height,
+      ...fontOf(item.fontName)
     })
   }
   return spans

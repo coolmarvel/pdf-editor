@@ -137,7 +137,7 @@ async function main() {
   check(r.after.hist === 0, 'restore: empty history')
   await win.waitForSelector('[data-page-index]')
   await win.waitForTimeout(1200)
-  const thumbs = await win.evaluate(() => [...document.querySelectorAll('[data-thumb] canvas')].map((c) => c.width > 0 && c.height > 0))
+  const thumbs = await win.evaluate(() => [...document.querySelectorAll('[data-thumb] canvas:not([data-testid="thumb-overlay"])')].map((c) => c.width > 0 && c.height > 0))
   check(thumbs.length === 2 && thumbs.every(Boolean), `thumbnails rendered after restore (${thumbs.length})`)
   await win.screenshot({ path: path.join(OUT, 'd4-after-restore.png') })
 

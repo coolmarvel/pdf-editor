@@ -12,8 +12,8 @@ import type { PDFPage, PDFObject } from 'pdf-lib'
 import type { PageRef } from '@core/pages'
 import type { PageObject, LinkObj, NoteObj } from '@core/objects'
 import { getDocBytes, renderPage } from './docs'
-import { drawObjects, preloadImage, effectiveBlend } from '@renderer/editor/draw'
-import { makeCanvas, releaseCanvas, canvasBytes, imageUrlsOf } from '@renderer/editor/canvasUtil'
+import { drawObjects, effectiveBlend } from '@renderer/editor/draw'
+import { makeCanvas, releaseCanvas, canvasBytes, imageUrlsOf, preloadImage } from '@renderer/editor/canvasUtil'
 
 /** 오버레이 굽기 해상도 (pt → px 배율). 2.5 ≈ 180dpi */
 const BURN_SCALE = 2.5

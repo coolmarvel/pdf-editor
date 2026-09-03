@@ -29,8 +29,11 @@ export function addRotation(base: Rotation, delta: 90 | -90): Rotation {
   return (((base + delta) % 360) + 360) % 360 as Rotation
 }
 
+/** 기본 페이지 크기(A4, pt 정수) — 빈 페이지·표시 크기 폴백 공용 */
+export const DEFAULT_PAGE_SIZE = { w: 595, h: 842 }
+
 /** 빈 페이지 삽입 (index 위치 앞에) */
-export function insertBlank(pages: PageRef[], index: number, size = { w: 595, h: 842 }): PageRef[] {
+export function insertBlank(pages: PageRef[], index: number, size: { w: number; h: number } = DEFAULT_PAGE_SIZE): PageRef[] {
   const blank: PageRef = { id: newPageId(), docId: 'blank', pageIndex: -1, extraRotation: 0, blankSize: size }
   return [...pages.slice(0, index), blank, ...pages.slice(index)]
 }

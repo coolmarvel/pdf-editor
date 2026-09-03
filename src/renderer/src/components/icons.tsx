@@ -3,17 +3,13 @@ import * as L from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 /**
- * 앱 전체 아이콘 세트 = lucide (2026-08-25).
- *
- * 이력: MUI Material 아이콘(채움·두꺼운 글리프) → 2026-08-15 자체 stroke 세트 20종 →
- * 2026-08-25 lucide 로 통일. lucide 는 "stroke · 둥근 끝 · viewBox 24" 문법이 자체 세트와 같고
- * 1,500종이 한 규격이라 툴바 밖(컨텍스트 바·다이얼로그·랜딩)까지 톤이 맞는다. 손그린 SVG 유지보수 제거.
+ * 앱 전체 아이콘 세트 = lucide: "stroke · 둥근 끝 · viewBox 24" 한 규격 1,500종이라 툴바 밖(컨텍스트 바·다이얼로그·랜딩)까지 톤이 맞는다.
  *
  * 규칙: MUI `SvgIcon` 으로 감싸 `fontSize`/`sx`/`color` 등 기존 호출부 API 를 그대로 유지한다.
  * SvgIcon 의 기본 CSS(fill: currentColor)가 lucide 의 fill="none" 속성을 덮어쓰므로 sx 로 fill:none 을 되돌린다.
- * 굵기는 1.75(lucide 기본 2 보다 살짝 가늘게 — 툴바 11.5px 라벨과 균형).
+ * 굵기는 1.5(DESIGN.md icon 토큰: lucide 20px stroke 1.5 round).
  */
-const STROKE_WIDTH = 1.75
+const STROKE_WIDTH = 1.5
 
 function wrap(Icon: LucideIcon, name: string): (props: SvgIconProps) => JSX.Element {
   const C = (props: SvgIconProps): JSX.Element => (
@@ -29,7 +25,7 @@ function wrap(Icon: LucideIcon, name: string): (props: SvgIconProps) => JSX.Elem
   return C
 }
 
-// ── 상단 툴바 (이름은 2026-08-15 세트와 동일 — 호출부 무수정) ────────────────
+// ── 상단 툴바 ────────────────
 export const IconPages = wrap(L.PanelLeft, 'IconPages')
 export const IconCursor = wrap(L.MousePointer2, 'IconCursor')
 export const IconUndo = wrap(L.Undo2, 'IconUndo')

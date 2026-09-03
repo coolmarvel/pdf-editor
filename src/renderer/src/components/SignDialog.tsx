@@ -11,16 +11,18 @@ import FormControlLabel from '@mui/material/FormControlLabel'
 import Radio from '@mui/material/Radio'
 import Paper from '@mui/material/Paper'
 import IconButton from '@mui/material/IconButton'
+import useMediaQuery from '@mui/material/useMediaQuery'
 import { useEditor } from '@renderer/store/editor'
 import { useT } from '@renderer/i18n'
-import { renderTypedSign, fileToDataUrl, SIGN_FONTS } from '@renderer/editor/stamp'
+import { renderTypedSign, SIGN_FONTS } from '@renderer/editor/stamp'
+import { fileToDataUrl, loadImage, makeCanvas, signPngBytes, toBitmap } from '@renderer/editor/canvasUtil'
 import { ui } from '@renderer/theme'
-import { Trash2 } from './icons'
+import { Download, Trash2 } from './icons'
 import SwatchRow from './ui/SwatchRow'
 import { DialogFooter, DialogHeader } from './ui/DialogBars'
 
 const INK_COLORS = ['#111111', '#1e99f5', '#5742ea']
-// 우리 브랜드 라이트 스킨 (Guru 캡처는 다크모드였음 — 2026-07-10 피드백으로 흰/빨강 전환)
+// 우리 브랜드 라이트 스킨 (흰 배경 + 빨간 강조)
 const DIVIDER = ui.gray[200]
 const ACTIVE = ui.brand[500]
 const CANVAS_BG = '#fff'
@@ -43,6 +45,21 @@ export default function SignDialog({ open, onClose }: { open: boolean; onClose: 
   const [image, setImage] = useState<{ dataUrl: string; aspect: number } | null>(null)
   const [hasDrawing, setHasDrawing] = useState(false)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  // 폰 폭(< 600px): 전체 화면 + 그리기 캔버스를 세로로 키움(손가락 서명) + 폰트 1열. 터치(pointer: coarse): 색상 점 32px
+  const narrow = useMediaQuery('(max-width: 599.95px)')
+  const coarse = useMediaQuery('(pointer: coarse)')
+  // 좁은 화면의 캔버스 내부 해상도 — CSS 크기 × DPR 로 다시 잡는다(비율이 안 맞으면 획이 찌그러진다). 데스크톱은 1040×420 고정.
+  // Dialog 내용은 포털로 한 박자 늦게 붙으므로 effect 가 아니라 콜백 ref 에서 잰다
+  const [canvasPx, setCanvasPx] = useState<{ w: number; h: number } | null>(null)
+  const canvasBoxRef = (box: HTMLDivElement | null): void => {
+    if (!box || !narrow) return
+    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    const cssW = Math.max(1, box.clientWidth - 3) // 1.5px 점선 테두리
+    const cssH = Math.min(Math.round(window.innerHeight * 0.4), 320)
+    const next = { w: Math.round(cssW * dpr), h: Math.round(cssH * dpr) }
+    setCanvasPx((cur) => (cur && cur.w === next.w && cur.h === next.h ? cur : next))
+  }
+  useEffect(() => { if (!narrow) setCanvasPx(null) }, [narrow])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const drawingRef = useRef(false)
 
@@ -100,9 +117,7 @@ export default function SignDialog({ open, onClose }: { open: boolean; onClose: 
   }
 
   function placeSaved(dataUrl: string): void {
-    const img = new Image()
-    img.onload = () => place(dataUrl, img.width / img.height, false)
-    img.src = dataUrl
+    void loadImage(dataUrl).then((img) => place(dataUrl, img.width / img.height, false))
   }
 
   function confirm(): void {
@@ -129,11 +144,10 @@ export default function SignDialog({ open, onClose }: { open: boolean; onClose: 
       const pad = 8
       const w = maxX - minX + pad * 2
       const h = maxY - minY + pad * 2
-      const out = document.createElement('canvas')
-      out.width = w
-      out.height = h
-      out.getContext('2d')!.drawImage(canvas, minX - pad, minY - pad, w, h, 0, 0, w, h)
-      place(out.toDataURL('image/png'), w / h)
+      const out = makeCanvas(w, h)
+      out.ctx.drawImage(canvas, minX - pad, minY - pad, w, h, 0, 0, w, h)
+      const b = toBitmap(out.canvas)
+      place(b.dataUrl, b.aspect)
     } else if (tab === 1 && image) {
       place(image.dataUrl, image.aspect)
     } else if (tab === 2 && typed.trim()) {
@@ -163,13 +177,14 @@ export default function SignDialog({ open, onClose }: { open: boolean; onClose: 
       onClose={closeDialog}
       fullWidth
       maxWidth="lg"
+      fullScreen={narrow}
       slotProps={{
         backdrop: { sx: { bgcolor: 'rgba(16, 24, 40, .4)' } },
         paper: {
           sx: {
-            width: 'min(720px, calc(100vw - 64px))',
-            maxHeight: 'calc(100vh - 96px)',
-            borderRadius: 2,
+            width: narrow ? '100%' : 'min(720px, calc(100vw - 64px))',
+            maxHeight: narrow ? '100%' : 'calc(100vh - 96px)',
+            borderRadius: narrow ? 0 : 2,
             bgcolor: '#fff',
             color: ui.gray[900],
             overflow: 'hidden',
@@ -190,7 +205,7 @@ export default function SignDialog({ open, onClose }: { open: boolean; onClose: 
           />
 
           <Box sx={{ flex: 1, bgcolor: ui.gray[50], p: 3 }}>
-            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(200px, 1fr))', gap: 2 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : 'repeat(2, minmax(200px, 1fr))', gap: 2 }}>
               {savedSigns.map((s, i) => (
                 <Paper
                   key={`${s.slice(0, 24)}-${i}`}
@@ -210,30 +225,35 @@ export default function SignDialog({ open, onClose }: { open: boolean; onClose: 
                     '&:hover': { borderColor: ACTIVE, boxShadow: `0 0 0 1px ${ACTIVE}` }
                   }}
                 >
-                  <IconButton
-                    aria-label={t('delete')}
-                    size="small"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      removeSavedSign(i)
-                      if (savedSigns.length === 1) {
-                        resetDraft()
-                        setMode('add')
-                      }
-                    }}
-                    sx={{
-                      position: 'absolute',
-                      top: 6,
-                      right: 6,
-                      bgcolor: '#fff',
-                      color: ui.gray[500],
-                      border: `1px solid ${ui.gray[300]}`,
-                      borderRadius: 1,
-                      '&:hover': { bgcolor: ui.brand[50], color: ui.brand[600], borderColor: ui.brand[500] }
-                    }}
-                  >
-                    <Trash2 fontSize="small" />
-                  </IconButton>
+                  <Stack direction="row" spacing={0.5} sx={{ position: 'absolute', top: 6, right: 6 }}>
+                    <IconButton
+                      aria-label={t('downloadSign')}
+                      title={t('downloadSign')}
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void saveSignPng(s)
+                      }}
+                      sx={cardIconSx}
+                    >
+                      <Download fontSize="small" />
+                    </IconButton>
+                    <IconButton
+                      aria-label={t('delete')}
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        removeSavedSign(i)
+                        if (savedSigns.length === 1) {
+                          resetDraft()
+                          setMode('add')
+                        }
+                      }}
+                      sx={cardIconSx}
+                    >
+                      <Trash2 fontSize="small" />
+                    </IconButton>
+                  </Stack>
                   <img src={s} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }} />
                 </Paper>
               ))}
@@ -271,14 +291,14 @@ export default function SignDialog({ open, onClose }: { open: boolean; onClose: 
             <Tab label={t('typing')} />
           </Tabs>
 
-          <Box sx={{ flex: 1, bgcolor: ui.gray[50], px: 3, py: 2, overflowY: 'auto' }}>
+          <Box sx={{ flex: 1, bgcolor: ui.gray[50], px: narrow ? 2 : 3, py: 2, overflowY: 'auto' }}>
             {showInk && (
               <SwatchRow
                 colors={INK_COLORS}
                 value={color}
                 onChange={setColor}
-                size={22}
-                spacing={2}
+                size={coarse ? 32 : 22}
+                spacing={coarse ? 1.5 : 2}
                 sx={{ justifyContent: 'flex-end', mb: 1, pr: 0.5 }}
                 swatchSx={(_, sel) => ({ cursor: 'pointer', boxShadow: sel ? `0 0 0 2px #fff, 0 0 0 4px ${ACTIVE}` : '0 0 0 1px rgba(0,0,0,.12)' })}
               />
@@ -286,12 +306,12 @@ export default function SignDialog({ open, onClose }: { open: boolean; onClose: 
 
             {tab === 0 && (
               <Stack spacing={1.5} alignItems="center">
-                <Box sx={{ width: '100%', border: `1.5px dashed ${ui.gray[300]}`, borderRadius: 1.5, bgcolor: CANVAS_BG, position: 'relative', mt: 1 }}>
+                <Box ref={canvasBoxRef} sx={{ width: '100%', border: `1.5px dashed ${ui.gray[300]}`, borderRadius: 1.5, bgcolor: CANVAS_BG, position: 'relative', mt: 1 }}>
                   <canvas
                     ref={canvasRef}
-                    width={1040}
-                    height={420}
-                    style={{ width: '100%', display: 'block', touchAction: 'none', cursor: 'crosshair' }}
+                    width={canvasPx?.w ?? 1040}
+                    height={canvasPx?.h ?? 420}
+                    style={{ width: '100%', height: canvasPx ? 'min(40vh, 320px)' : undefined, display: 'block', touchAction: 'none', cursor: 'crosshair' }}
                     onPointerDown={(e) => {
                       drawingRef.current = true
                       const canvas = canvasRef.current!
@@ -411,7 +431,7 @@ export default function SignDialog({ open, onClose }: { open: boolean; onClose: 
                 <Button variant="text" disabled={!typed.trim()} onClick={clearCurrentSignature} sx={clearButtonSx}>
                   {t('clearSignature')}
                 </Button>
-                <Box sx={{ width: '100%', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+                <Box sx={{ width: '100%', display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr', gap: 1 }}>
                   {SIGN_FONTS.map((font, i) => (
                     <Box
                       key={font}
@@ -491,6 +511,20 @@ function visiblePageCenter(pageIndex: number): { x: number; y: number } | undefi
   const right = Math.min(r.right, window.innerWidth)
   if (bottom <= top || right <= left) return undefined
   return { x: ((left + right) / 2 - r.left) / r.width, y: ((top + bottom) / 2 - r.top) / r.height }
+}
+
+/** 저장된 서명을 투명 배경 PNG 파일로 저장 (dataURL → 바이트). 데스크톱은 오프라인 앱이라 제한 없음 */
+async function saveSignPng(dataUrl: string): Promise<void> {
+  const bytes = await signPngBytes(dataUrl)
+  await window.api.saveBuffer(`signature-${new Date().toISOString().slice(0, 10)}.png`, bytes)
+}
+
+const cardIconSx = {
+  bgcolor: '#fff',
+  color: ui.gray[500],
+  border: `1px solid ${ui.gray[300]}`,
+  borderRadius: 1,
+  '&:hover': { bgcolor: ui.brand[50], color: ui.brand[600], borderColor: ui.brand[500] }
 }
 
 const primaryButtonSx = {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import '@renderer/fonts'
 import Snackbar from '@mui/material/Snackbar'
 import Alert from '@mui/material/Alert'
 import { useEditor } from './store/editor'

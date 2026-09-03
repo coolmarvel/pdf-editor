@@ -49,6 +49,28 @@ export function loadImage(src: string): Promise<HTMLImageElement> {
   })
 }
 
+/** 이미지 파일 → dataUrl + 종횡비 */
+export function fileToDataUrl(file: File): Promise<Bitmap> {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  }).then((dataUrl) => loadImage(dataUrl).then((img) => ({ dataUrl, aspect: img.width / img.height })))
+}
+
+/** dataUrl(서명 등) → 투명 배경 PNG 바이트로 재인코딩 (JPEG 로 넣은 이미지도 PNG 컨테이너로 통일). 데스크톱 저장·웹 내려받기 공용 */
+export async function signPngBytes(dataUrl: string): Promise<Uint8Array> {
+  const img = await loadImage(dataUrl)
+  const { canvas, ctx } = makeCanvas(img.naturalWidth, img.naturalHeight)
+  ctx.drawImage(img, 0, 0)
+  try {
+    return await canvasBytes(canvas, 'image/png')
+  } finally {
+    releaseCanvas(canvas)
+  }
+}
+
 /**
  * 한 줄 텍스트 → 가운데 정렬 비트맵 (타이핑 서명·워터마크 공용).
  * 폭 = 실측 + padX*2 (최소 100px), 높이 = fontPx × lineFactor.
@@ -88,15 +110,15 @@ export function preloadImage(dataUrl: string): Promise<HTMLImageElement> {
   return p
 }
 
-/** 디코드가 끝난 이미지 (없으면 undefined — 그리기는 건너뛴다) */
-export function cachedImage(dataUrl: string): HTMLImageElement | undefined {
-  return loaded.get(dataUrl)
-}
-
-/** 문서 닫기 등에서 호출 — dataUrl 키(base64 전체)와 비트맵을 함께 놓아준다 */
+/** 문서를 닫을 때 디코드 캐시를 비운다 — 서명·스탬프·삽입 이미지 비트맵(수 MB씩)이 탭 수명 동안 남지 않게. 필요하면 preloadImage 가 다시 디코드한다 */
 export function clearImageCache(): void {
   pending.clear()
   loaded.clear()
+}
+
+/** 디코드가 끝난 이미지 (없으면 undefined — 그리기는 건너뛴다) */
+export function cachedImage(dataUrl: string): HTMLImageElement | undefined {
+  return loaded.get(dataUrl)
 }
 
 /** 이미지/워터마크 객체의 dataUrl (그 외 객체는 없음) */

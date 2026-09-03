@@ -64,7 +64,8 @@ ipcMain.handle('fs:saveBuffer', async (_e, defaultName: string, data: Uint8Array
   const { canceled, filePath } = await dialog.showSaveDialog({
     defaultPath: defaultName,
     title: '저장 위치 선택',
-    filters: [{ name: 'PDF 문서', extensions: ['pdf'] }]
+    // 확장자에 맞는 필터 — 서명 PNG 저장도 같은 핸들러를 쓴다
+    filters: defaultName.toLowerCase().endsWith('.png') ? [{ name: 'PNG 이미지', extensions: ['png'] }] : [{ name: 'PDF 문서', extensions: ['pdf'] }]
   })
   if (canceled || !filePath) return null
   await writeFile(filePath, Buffer.from(data))

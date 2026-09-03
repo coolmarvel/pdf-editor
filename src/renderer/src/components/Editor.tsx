@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
+import useMediaQuery from '@mui/material/useMediaQuery'
 import Snackbar from '@mui/material/Snackbar'
 import Alert from '@mui/material/Alert'
 import Button from '@mui/material/Button'
-import { useEditor } from '@renderer/store/editor'
+import { useEditor, exportFileName } from '@renderer/store/editor'
 import { useT, type I18nKey } from '@renderer/i18n'
 import { buildPdf } from '@renderer/pdf/save'
-import { fileToDataUrl } from '@renderer/editor/stamp'
+import { fileToDataUrl } from '@renderer/editor/canvasUtil'
 import TopBar from './TopBar'
 import Toolbar from './Toolbar'
 import SubToolbar from './SubToolbar'
@@ -21,7 +22,8 @@ import ConfirmDialog from './ui/ConfirmDialog'
 
 export default function Editor(): JSX.Element {
   const t = useT()
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  // 좁은 화면(< 900px: 태블릿 세로·폰)은 썸네일 사이드바를 접고 시작 — 툴바의 '페이지' 버튼으로 연다 (스토어 필드가 아니라 로컬 상태)
+  const [sidebarOpen, setSidebarOpen] = useState(() => (typeof window === 'undefined' ? true : window.matchMedia('(min-width: 900px)').matches))
   const editTextExitPrompt = useEditor((s) => s.editTextExitPrompt)
   const endEditTextSession = useEditor((s) => s.endEditTextSession)
   const cancelEditTextExit = useEditor((s) => s.cancelEditTextExit)
@@ -64,7 +66,7 @@ export default function Editor(): JSX.Element {
         e.preventDefault()
         s.removeObject(s.selected.pageId, s.selected.objectId)
       } else if (e.key === 'Escape' && !inEditable) {
-        // 활성 도구 비활성화 (2026-07-10 피드백). editText 세션은 setTool 이 저장 확인을 처리
+        // 활성 도구 비활성화. editText 세션은 setTool 이 저장 확인을 처리
         if (s.tool !== 'select') s.setTool('select')
         else if (s.selected) s.setSelected(null)
       }
@@ -93,8 +95,7 @@ export default function Editor(): JSX.Element {
   const onDownload = (): Promise<void> =>
     withBusy(async () => {
       const bytes = await makePdf()
-      const s = useEditor.getState()
-      const path = await window.api.saveBuffer(`${s.fileName || 'document'}.pdf`, bytes)
+      const path = await window.api.saveBuffer(exportFileName(), bytes)
       if (path) setToast({ msg: t('savedToast'), severity: 'success', path })
     }, 'saveFailed')
 
@@ -114,8 +115,13 @@ export default function Editor(): JSX.Element {
     setToast({ msg: t('imagePlaceToast'), severity: 'success' })
   }
 
+  // 낮은 화면(높이 < 480, 폰 가로 회전): 헤더+툴바+서브툴바가 세로의 절반을 먹어 문서가 130px 남짓 보였다 → 서브툴바를
+  // 문서 위 오버레이(도구/선택 시에만)로. 폭 브레이크포인트가 아닌 높이 조건
+  const shortScreen = useMediaQuery('(max-height: 479.95px)')
+
+  // touchAction pan-x pan-y: 에디터 안에서 시작한 두 손가락 핀치가 브라우저 전체 확대(헤더·툴바까지)로 가지 않는다 — 문서 줌은 PagesView 가 처리
   return (
-    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', touchAction: 'pan-x pan-y' }}>
       <TopBar busy={busy} onPrint={() => void onPrint()} onDownload={() => void onDownload()} onDone={() => setDoneOpen(true)} />
       <Toolbar
         sidebarOpen={sidebarOpen}
@@ -125,11 +131,12 @@ export default function Editor(): JSX.Element {
         onOpenStamp={() => setStampOpen(true)}
         onOpenSign={() => setSignOpen(true)}
       />
-      <SubToolbar />
+      {!shortScreen && <SubToolbar />}
 
       <Box sx={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative' }}>
-        {sidebarOpen && <ThumbnailSidebar onManagePages={() => setManagePagesOpen(true)} />}
+        {sidebarOpen && <ThumbnailSidebar onManagePages={() => setManagePagesOpen(true)} onClose={() => setSidebarOpen(false)} />}
         <PagesView />
+        {shortScreen && <SubToolbar overlay />}
         <SearchBar />
         <FloatingPager />
       </Box>

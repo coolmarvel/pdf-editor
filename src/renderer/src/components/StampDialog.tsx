@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { ui } from '@renderer/theme'
 import Dialog from '@mui/material/Dialog'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -8,6 +9,7 @@ import Typography from '@mui/material/Typography'
 import Checkbox from '@mui/material/Checkbox'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Paper from '@mui/material/Paper'
+import useMediaQuery from '@mui/material/useMediaQuery'
 import { PRESET_STAMPS, CUSTOM_STAMP_COLORS, renderStamp, nowStampDateTime, type StampSpec } from '@renderer/editor/stamp'
 import { useEditor } from '@renderer/store/editor'
 import { useT } from '@renderer/i18n'
@@ -37,6 +39,8 @@ export default function StampDialog({ open, onClose }: { open: boolean; onClose:
   const [withDate, setWithDate] = useState(true)
   const [withTime, setWithTime] = useState(false)
   const [colorIdx, setColorIdx] = useState(0)
+  // 폰 폭(< 600px): 전체 화면 — 프리셋 그리드가 화면 높이를 쓴다
+  const narrow = useMediaQuery('(max-width: 599.95px)')
 
   function pick(spec: StampSpec): void {
     // REVISED/REJECTED 는 찍는 시점의 날짜·시간이 들어간다 (Guru)
@@ -63,8 +67,8 @@ export default function StampDialog({ open, onClose }: { open: boolean; onClose:
   }
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <Box sx={{ p: 2.5 }}>
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" fullScreen={narrow}>
+      <Box sx={{ p: narrow ? 2 : 2.5, display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
           <Typography fontWeight={800}>{custom ? t('customStamp') : t('presetStamp')}</Typography>
           <Button size="small" variant="outlined" color="secondary" onClick={() => setCustom(!custom)}>
@@ -73,7 +77,7 @@ export default function StampDialog({ open, onClose }: { open: boolean; onClose:
         </Stack>
 
         {!custom ? (
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, maxHeight: 460, overflowY: 'auto', pr: 0.5 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5, maxHeight: narrow ? 'none' : 460, flex: narrow ? 1 : undefined, minHeight: 0, alignContent: 'start', overflowY: 'auto', pr: 0.5 }}>
             {previews.map(({ spec, img }, i) => (
               <Paper
                 key={i}
@@ -106,7 +110,7 @@ export default function StampDialog({ open, onClose }: { open: boolean; onClose:
               onChange={(col) => setColorIdx(STAMP_COLORS.indexOf(col))}
               spacing={1}
               prefix={<Typography variant="body2">{t('color')}</Typography>}
-              swatchSx={(_, sel) => ({ cursor: 'pointer', border: sel ? '3px solid #1f2430' : '3px solid transparent' })}
+              swatchSx={(_, sel) => ({ cursor: 'pointer', boxShadow: sel ? `0 0 0 2px #fff, 0 0 0 4px ${ui.brand[500]}` : '0 0 0 1px rgba(0,0,0,.12)' })} /* 서명 다이얼로그와 같은 선택 링 */
             />
             <Stack direction="row" spacing={1} justifyContent="flex-end">
               <Button color="inherit" onClick={onClose}>

@@ -79,6 +79,11 @@ const ko = {
   link: '링크',
   pageLayout: '레이아웃',
   managePages: '페이지 관리',
+  // 툴바 그룹(스플릿 버튼) 라벨 + ▾ 접근성 이름
+  groupText: '텍스트',
+  groupMarks: '표시',
+  groupAnnotate: '주석 도구',
+  moreOptions: '더 보기',
   // 페이지 레이아웃 패널
   pageMode: '페이지 모드',
   pageModeSingle: '한 쪽씩',
@@ -165,6 +170,7 @@ const ko = {
   clearSignature: '서명 지우기',
   savedSigns: '저장된 서명:',
   saveSign: '서명 저장',
+  downloadSign: '서명 PNG 저장',
   // 워터마크
   watermark: '워터마크',
   wmText: '텍스트',
@@ -248,6 +254,10 @@ const en: Record<keyof typeof ko, string> = {
   link: 'Links',
   pageLayout: 'Layout',
   managePages: 'Manage Pages',
+  groupText: 'Text',
+  groupMarks: 'Marks',
+  groupAnnotate: 'Annotate',
+  moreOptions: 'More options',
   pageMode: 'Page Mode',
   pageModeSingle: 'Single page',
   pageModeDouble: 'Two pages',
@@ -326,6 +336,7 @@ const en: Record<keyof typeof ko, string> = {
   clearSignature: 'Clear signature',
   savedSigns: 'Saved signatures:',
   saveSign: 'Save signature',
+  downloadSign: 'Save signature PNG',
   watermark: 'Watermark',
   wmText: 'Text',
   wmImage: 'Image',

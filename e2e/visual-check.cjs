@@ -165,7 +165,9 @@ async function main() {
   const ty = pb.y + pb.height * 0.086
   const curAt = async () => win.evaluate(() => getComputedStyle(document.querySelectorAll('[data-page-index]')[0].querySelector('[data-testid="interaction-layer"]')).cursor)
 
-  await win.click('button:has-text("텍스트 수정")')
+  // v1.7.0: 텍스트 그룹 스플릿 버튼 — 처음엔 ▾ 로 메뉴를 열어 '텍스트 수정' 선택(이후 주 버튼 라벨이 '텍스트 수정' 이 되어 토글은 그대로)
+  await win.click('[data-testid="tool-text-menu"]')
+  await win.click('li[role="menuitem"]:has-text("텍스트 수정")')
   await win.waitForTimeout(800) // 스팬 추출 대기
   await win.mouse.move(tx, ty)
   await win.waitForTimeout(150)

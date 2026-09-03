@@ -5,9 +5,9 @@
  * mode 'export': 링크/노트는 그리지 않는다 — 저장 시 실제 PDF 주석(Annot)으로 들어가기 때문.
  */
 import type { PageObject, TextObj, EditTextObj, StrokeObj, ShapeObj, WatermarkObj, Rect, BlendMode } from '@core/objects'
+import { TEXT_LINE_HEIGHT } from '@core/objects'
 import { cachedImage } from './canvasUtil'
-
-export { preloadImage, clearImageCache } from './canvasUtil'
+import { ui } from '@renderer/theme'
 
 /**
  * 객체의 실효 혼합 모드. 'normal' 이 아니면 백드롭(페이지 픽셀) 위에서 합성해야
@@ -17,7 +17,10 @@ export function effectiveBlend(o: PageObject): BlendMode {
   return o.type === 'stroke' ? (o.blend ?? (o.kind === 'highlight' ? 'multiply' : 'normal')) : 'normal'
 }
 
-/** 선택 가능한 폰트 (Windows 기본 탑재 위주 — 오버레이 굽기가 캔버스 렌더라 설치된 폰트면 저장도 동일) */
+/**
+ * 선택 가능한 폰트. 앞쪽은 시스템 서체(Windows 기본 탑재 위주), 뒤쪽은 번들 서체(renderer/fonts.ts, OFL) 라 OS 에 상관없이 같다.
+ * 오버레이 굽기가 캔버스 렌더라 CSS 로 그릴 수 있는 서체면 저장도 동일.
+ */
 export const FONT_STACKS: Record<string, string> = {
   Helvetica: `Helvetica, Arial, sans-serif`,
   Arial: `Arial, sans-serif`,
@@ -35,7 +38,71 @@ export const FONT_STACKS: Record<string, string> = {
   Verdana: `Verdana, sans-serif`,
   맑은고딕: `'Malgun Gothic', '맑은 고딕', sans-serif`,
   바탕: `Batang, '바탕', serif`,
-  굴림: `Gulim, '굴림', sans-serif`
+  굴림: `Gulim, '굴림', sans-serif`,
+  // ── 번들 서체 (한글) ──
+  나눔고딕: `'Nanum Gothic', sans-serif`,
+  나눔명조: `'Nanum Myeongjo', serif`,
+  나눔손글씨펜: `'Nanum Pen Script', cursive`,
+  고운돋움: `'Gowun Dodum', sans-serif`,
+  // ── 번들 서체 (라틴) ──
+  Roboto: `Roboto, sans-serif`,
+  'Open Sans': `'Open Sans', sans-serif`,
+  Lato: `Lato, sans-serif`,
+  Montserrat: `Montserrat, sans-serif`,
+  Poppins: `Poppins, sans-serif`,
+  Raleway: `Raleway, sans-serif`,
+  Oswald: `Oswald, sans-serif`,
+  'Playfair Display': `'Playfair Display', serif`,
+  Merriweather: `Merriweather, serif`,
+  'Source Code Pro': `'Source Code Pro', monospace`,
+  'Dancing Script': `'Dancing Script', cursive`,
+  Pacifico: `Pacifico, cursive`
+}
+
+/** 원본 PDF 폰트명(예: `ABCDEF+NanumGothic-Bold`, `TimesNewRomanPSMT`, `Helvetica-BoldOblique`) → 우리 목록의 키. fallback = pdf.js 의 generic family */
+const FONT_ALIASES: [RegExp, string][] = [
+  [/malgun|맑은/, '맑은고딕'],
+  [/batang|바탕/, '바탕'],
+  [/gulim|굴림|dotum|돋움/, '굴림'],
+  [/notosanskr|notosanscjk|sourcehansans|본고딕/, '나눔고딕'],
+  [/notoserifkr|notoserifcjk|sourcehanserif|본명조/, '나눔명조'],
+  [/nanumgothic|나눔고딕|nanumbarungothic/, '나눔고딕'],
+  [/nanummyeongjo|나눔명조/, '나눔명조'],
+  [/nanumpen|나눔손글씨/, '나눔손글씨펜'],
+  [/gowundodum/, '고운돋움'],
+  [/arial/, 'Arial'],
+  [/helvetica/, 'Helvetica'],
+  [/calibri/, 'Calibri'],
+  [/centurygothic/, 'Century Gothic'],
+  [/consolas/, 'Consolas'],
+  [/courier/, 'Courier'],
+  [/georgia/, 'Georgia'],
+  [/impact/, 'Impact'],
+  [/lucida/, 'Lucida Sans'],
+  [/segoeui/, 'Segoe UI'],
+  [/tahoma/, 'Tahoma'],
+  [/times/, 'Times'],
+  [/trebuchet/, 'Trebuchet MS'],
+  [/verdana/, 'Verdana'],
+  [/roboto/, 'Roboto'],
+  [/opensans/, 'Open Sans'],
+  [/lato/, 'Lato'],
+  [/montserrat/, 'Montserrat'],
+  [/poppins/, 'Poppins'],
+  [/raleway/, 'Raleway'],
+  [/oswald/, 'Oswald'],
+  [/playfair/, 'Playfair Display'],
+  [/merriweather/, 'Merriweather'],
+  [/sourcecodepro/, 'Source Code Pro'],
+  [/dancingscript/, 'Dancing Script'],
+  [/pacifico/, 'Pacifico']
+]
+export function matchFontFamily(pdfFontName: string | undefined, fallback?: string): string {
+  const raw = (pdfFontName ?? '').replace(/^[A-Z]{6}\+/, '').toLowerCase().replace(/[\s_-]/g, '')
+  for (const [re, key] of FONT_ALIASES) if (re.test(raw)) return key
+  if (fallback === 'serif') return 'Times'
+  if (fallback === 'monospace') return 'Courier'
+  return 'Helvetica'
 }
 
 export function fontCss(family: string): string {
@@ -44,7 +111,7 @@ export function fontCss(family: string): string {
 
 function drawStroke(ctx: CanvasRenderingContext2D, s: StrokeObj, W: number, H: number): void {
   if (s.points.length === 0) return
-  const blend = s.blend ?? (s.kind === 'highlight' ? 'multiply' : 'normal')
+  const blend = effectiveBlend(s)
   ctx.globalCompositeOperation = blend === 'normal' ? 'source-over' : blend
   ctx.globalAlpha = s.opacity
   ctx.strokeStyle = s.kind === 'whiteout' ? '#ffffff' : s.color
@@ -66,8 +133,11 @@ function drawStroke(ctx: CanvasRenderingContext2D, s: StrokeObj, W: number, H: n
   ctx.globalAlpha = 1
 }
 
+/** 글자 px = 정규화 크기 × 캔버스 높이, 최소 6px (너무 작으면 캔버스가 아예 안 그린다) */
+const textPx = (size: number, H: number): number => Math.max(6, size * H)
+
 function textCssFont(size: number, family: string, bold: boolean, italic: boolean, H: number): string {
-  return `${italic ? 'italic ' : ''}${bold ? 'bold ' : ''}${Math.max(6, size * H)}px ${fontCss(family)}`
+  return `${italic ? 'italic ' : ''}${bold ? 'bold ' : ''}${textPx(size, H)}px ${fontCss(family)}`
 }
 
 /**
@@ -91,8 +161,8 @@ export function drawTextObj(ctx: CanvasRenderingContext2D, t: TextObj, W: number
   ctx.globalAlpha = t.opacity
   ctx.font = textCssFont(t.size, t.font, t.bold, t.italic, H)
   ctx.textBaseline = 'top'
-  const px = Math.max(6, t.size * H)
-  const lh = px * 1.25
+  const px = textPx(t.size, H)
+  const lh = px * TEXT_LINE_HEIGHT
   const { lines, widths } = measureLines(ctx, t, H)
   // textBoxRect(선택 외곽선·히트테스트)와 같은 기준: 실측 폭 + 명시 높이(없으면 내용 높이)
   const blockH = lh * lines.length
@@ -306,7 +376,7 @@ export function drawObjects(ctx: CanvasRenderingContext2D, objects: PageObject[]
         break
       case 'link':
         if (mode === 'editor') {
-          ctx.strokeStyle = '#3b82f6'
+          ctx.strokeStyle = ui.selection
           ctx.setLineDash([4, 3])
           ctx.lineWidth = 1.5
           ctx.strokeRect(o.rect.x * W, o.rect.y * H, o.rect.w * W, o.rect.h * H)

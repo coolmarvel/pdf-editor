@@ -3,7 +3,7 @@
  * 프리셋 25종 = pdfguru 기본 스탬프 세트 (직사각 20 + 날짜자동 2 + 화살표 태그 3 + 도형 2).
  */
 
-import { makeCanvas, toBitmap, loadImage, renderTextBitmap, type Bitmap } from './canvasUtil'
+import { makeCanvas, toBitmap, renderTextBitmap, type Bitmap } from './canvasUtil'
 
 export interface StampSpec {
   text: string
@@ -168,13 +168,3 @@ export const SIGN_FONTS = [
   `'Comic Sans MS', cursive`,
   `'Ink Free', cursive`
 ]
-
-/** 이미지 파일 → dataUrl + 종횡비 */
-export function fileToDataUrl(file: File): Promise<Bitmap> {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  }).then((dataUrl) => loadImage(dataUrl).then((img) => ({ dataUrl, aspect: img.width / img.height })))
-}

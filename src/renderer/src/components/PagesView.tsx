@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import Box from '@mui/material/Box'
 import { useEditor } from '@renderer/store/editor'
 import { ui } from '@renderer/theme'
@@ -6,6 +6,19 @@ import PageCanvas from './PageCanvas'
 
 /** 페이지 영역 좌우 고정 여백(px) — fit 계산과 실제 padding 이 같은 값을 써야 폭 맞춤에서 가로 스크롤이 생기지 않는다 */
 const GUTTER_X = 32
+
+/** 컨테이너 크기 기준 fit 배율 계산 (폭 맞춤 = 컨테이너 폭 − 고정 여백). 스토어를 직접 읽어 렌더 클로저에 묶이지 않는다 */
+function computeFit(el: HTMLDivElement): number | null {
+  const { pages, displaySizes, pageMode, fitMode } = useEditor.getState()
+  if (pages.length === 0) return null
+  const first = displaySizes[pages[0].id]
+  if (!first) return null
+  const cols = pageMode === 'double' ? 2 : 1
+  const fitW = (el.clientWidth - GUTTER_X * 2 - (cols - 1) * 16) / (first.w * cols)
+  if (fitMode === 'width') return fitW
+  const fitH = (el.clientHeight - 48) / first.h
+  return Math.min(fitH, fitW)
+}
 
 /**
  * 페이지 표시 영역.
@@ -32,18 +45,13 @@ export default function PagesView(): JSX.Element {
   const midsRef = useRef<number[] | null>(null)
   /** 마지막으로 fit 계산해서 넣은 zoom — 컨테이너 폭이 바뀌었을 때 "사용자가 직접 줌을 바꾸지 않았다"면 다시 fit 하기 위해 */
   const fitZoomRef = useRef<number | null>(null)
-
-  /** 컨테이너 크기 기준 fit 배율 계산 (폭 맞춤 = 컨테이너 폭 − 고정 여백) */
-  function computeFit(el: HTMLDivElement): number | null {
-    if (pages.length === 0) return null
-    const first = displaySizes[pages[0].id]
-    if (!first) return null
-    const cols = pageMode === 'double' ? 2 : 1
-    const fitW = (el.clientWidth - GUTTER_X * 2 - (cols - 1) * 16) / (first.w * cols)
-    if (fitMode === 'width') return fitW
-    const fitH = (el.clientHeight - 48) / first.h
-    return Math.min(fitH, fitW)
-  }
+  const lastWidthRef = useRef<number | null>(null)
+  /** 복원된 줌(임시본) 검사를 마운트당 한 번만 */
+  const restoredCheckedRef = useRef(false)
+  /** 두 손가락 핀치: 시작 거리·시작 줌 (터치 전용, 마우스는 관여 없음) */
+  const pinchRef = useRef<{ dist: number; zoom: number } | null>(null)
+  /** 줌이 바뀐 뒤 스크롤을 보정할 기준점 — 핀치 중심(컨테이너 좌표)과 그 지점의 이전 콘텐츠 좌표 */
+  const anchorRef = useRef<{ cx: number; cy: number; sx: number; sy: number; zoom: number } | null>(null)
 
   // 첫 로드/재-fit(zoom=0): 기본은 폭 맞춤(Guru처럼 꽉 차게), "화면에 맞춤"은 페이지 전체
   useEffect(() => {
@@ -54,17 +62,32 @@ export default function PagesView(): JSX.Element {
     if (z === null) return
     fitZoomRef.current = Math.min(4, Math.max(0.2, z))
     setZoom(z)
-  })
+  }, [zoom, pages, displaySizes, pageMode, fitMode, setZoom])
 
-  // 컨테이너 폭 변화(사이드바 드래그·창 크기·검색바 등) → fit 상태였다면 다시 fit.
-  // window resize 만 듣던 시절엔 사이드바를 넓혀도 페이지가 그대로라 오른쪽이 잘렸다 (2026-08-26 피드백)
+  // 임시본 복원(zoom > 0 으로 시작하는 유일한 경로): 좁은 컨테이너(< 900, md 미만)에선 저장 당시의 줌을 버리고 폭 맞춤으로 시작한다.
+  // 768 에서 저장한 임시본(zoom 1.18)을 360 에서 열면 페이지 704px 가 뷰포트를 넘어 오른쪽 절반이 안 보였다.
+  // fit 으로 시작하면 이후 회전(컨테이너 폭 변화)도 아래 ResizeObserver 경로로 다시 맞춰진다. 데스크톱(≥ 900)은 저장된 줌 그대로.
+  useEffect(() => {
+    if (restoredCheckedRef.current || pages.length === 0 || zoom <= 0) return
+    restoredCheckedRef.current = true
+    if (fitZoomRef.current !== null) return // 이 마운트에서 이미 fit 을 계산했다 = 새로 연 문서
+    const el = containerRef.current
+    if (!el || el.clientWidth >= 900) return
+    const z = computeFit(el)
+    if (z === null) return
+    fitZoomRef.current = Math.min(4, Math.max(0.2, z))
+    setZoom(z)
+  }, [zoom, pages, displaySizes, pageMode, fitMode, setZoom])
+
+  // 컨테이너 폭 변화(사이드바 드래그·창 크기·검색바 등) → fit 상태였다면 다시 fit (window resize 만으로는 사이드바 폭 변화를 못 잡는다).
+  // 마운트당 한 번만 구독한다 (computeFit·setZoom 이 렌더 클로저에 묶이지 않으므로). "마지막으로 본 폭" 은 ref 에
   useEffect(() => {
     const el = containerRef.current
     if (!el || typeof ResizeObserver === 'undefined') return
-    let lastW = el.clientWidth
+    if (lastWidthRef.current === null) lastWidthRef.current = el.clientWidth
     const ro = new ResizeObserver(() => {
-      if (el.clientWidth === lastW) return
-      lastW = el.clientWidth
+      if (el.clientWidth === lastWidthRef.current) return
+      lastWidthRef.current = el.clientWidth
       const s = useEditor.getState()
       // 사용자가 줌을 손댔으면(현재 zoom ≠ 마지막 fit 값) 건드리지 않는다
       if (fitZoomRef.current === null || Math.abs(s.zoom - fitZoomRef.current) > 1e-6) return
@@ -75,7 +98,59 @@ export default function PagesView(): JSX.Element {
     })
     ro.observe(el)
     return () => ro.disconnect()
-  })
+  }, [setZoom])
+
+  // 두 손가락 핀치 → 에디터 줌 (브라우저 전체 확대 대신). React 의 onTouch* 는 passive 라 preventDefault 가 안 먹어
+  // 네이티브 리스너(passive:false)로 단다. 한 손가락(스크롤·그리기)은 건드리지 않는다. 컨테이너 touch-action 은 pan-x pan-y 라
+  // Chrome 은 핀치를 페이지 확대로 넘기지 않고, iOS 는 touchmove preventDefault 로 막는다
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const dist = (t: TouchList): number => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
+    const onStart = (e: TouchEvent): void => {
+      if (e.touches.length !== 2) return
+      e.preventDefault()
+      pinchRef.current = { dist: dist(e.touches), zoom: useEditor.getState().zoom }
+      panRef.current = null
+    }
+    const onMove = (e: TouchEvent): void => {
+      const p = pinchRef.current
+      if (!p || e.touches.length !== 2) return
+      e.preventDefault()
+      const z = Math.min(4, Math.max(0.2, (p.zoom * dist(e.touches)) / p.dist))
+      const cur = useEditor.getState().zoom
+      if (Math.abs(z - cur) < 1e-3) return
+      const r = el.getBoundingClientRect()
+      const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - r.left
+      const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - r.top
+      anchorRef.current = { cx, cy, sx: el.scrollLeft + cx, sy: el.scrollTop + cy, zoom: cur }
+      setZoom(z)
+    }
+    const onEnd = (e: TouchEvent): void => {
+      if (e.touches.length < 2) pinchRef.current = null
+    }
+    el.addEventListener('touchstart', onStart, { passive: false })
+    el.addEventListener('touchmove', onMove, { passive: false })
+    el.addEventListener('touchend', onEnd)
+    el.addEventListener('touchcancel', onEnd)
+    return () => {
+      el.removeEventListener('touchstart', onStart)
+      el.removeEventListener('touchmove', onMove)
+      el.removeEventListener('touchend', onEnd)
+      el.removeEventListener('touchcancel', onEnd)
+    }
+  }, [setZoom])
+
+  // 핀치로 줌이 바뀐 직후: 손가락 사이 중심점이 같은 문서 위치에 머물도록 스크롤 보정 (레이아웃 반영 뒤 = useLayoutEffect)
+  useLayoutEffect(() => {
+    const a = anchorRef.current
+    const el = containerRef.current
+    if (!a || !el || zoom <= 0) return
+    anchorRef.current = null
+    const k = zoom / a.zoom
+    el.scrollLeft = a.sx * k - a.cx
+    el.scrollTop = a.sy * k - a.cy
+  }, [zoom])
 
   // 페이저/썸네일 → 스크롤 요청 소비 (continuous 전용 — paged 는 currentPage 렌더로 충분)
   useEffect(() => {
@@ -175,6 +250,8 @@ export default function PagesView(): JSX.Element {
         // alignItems:center 는 컨테이너보다 넓은 행의 왼쪽을 스크롤로도 못 닿게 잘라낸다 → 행 쪽 margin:auto 로 가운데 정렬
         alignItems: 'stretch',
         gap: 3,
+        // 터치: 한 손가락 스크롤만 브라우저에 맡기고 핀치는 위 리스너가 에디터 줌으로 소비한다 (마우스엔 영향 없음)
+        touchAction: 'pan-x pan-y',
         cursor: tool === 'hand' ? 'grab' : undefined
       }}
     >

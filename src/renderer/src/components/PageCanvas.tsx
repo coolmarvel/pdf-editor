@@ -1,31 +1,28 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
-import Popover from '@mui/material/Popover'
 import Tooltip from '@mui/material/Tooltip'
-import TextField from '@mui/material/TextField'
-import Button from '@mui/material/Button'
-import Stack from '@mui/material/Stack'
-import ToggleButton from '@mui/material/ToggleButton'
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
-import IconButton from '@mui/material/IconButton'
 import type { SxProps, Theme } from '@mui/material/styles'
-import type { PageRef } from '@core/pages'
+import { DEFAULT_PAGE_SIZE, type PageRef } from '@core/pages'
 import type { PageObject, StrokeObj, TextObj, EditTextObj, LinkObj, NoteObj, Rect } from '@core/objects'
-import { newId, hitTest, textBoxRect, textContentHeight, rectsOverlap, objectRect, setObjectRect, unrotatePoint } from '@core/objects'
-import type { RenderTask } from 'pdfjs-dist'
-import { renderPage, extractTextSpans, type TextSpan } from '@renderer/pdf/docs'
-import { drawObjects, fontCss, measureTextWidthPx, effectiveBlend } from '@renderer/editor/draw'
-import { cachedImage, preloadImage } from '@renderer/editor/canvasUtil'
+import { newId, textContentHeight, rectsOverlap, objectRect, setObjectRect, SIGN_PLACE_W, IMAGE_PLACE_W } from '@core/objects'
+import { extractTextSpans, type TextSpan } from '@renderer/pdf/docs'
+import { drawObjects, measureTextWidthPx, effectiveBlend } from '@renderer/editor/draw'
+import { cachedImage, imageUrlsOf, preloadImage } from '@renderer/editor/canvasUtil'
+import { topHit, inSpan, moveObject } from '@renderer/editor/hit'
+import { splitStrokesAlong } from '@renderer/editor/erase'
+import { caretIndexAt, resizeTextPatch, type HandleId } from '@renderer/editor/textGeom'
+import { ROTATE_CURSOR, MARK_CURSOR, cursorFor } from '@renderer/editor/cursors'
+import { usePageRender } from '@renderer/hooks/usePageRender'
 import { useEditor, type SearchMatch } from '@renderer/store/editor'
 import { useT } from '@renderer/i18n'
-import { Trash2 } from './icons'
+import { ui } from '@renderer/theme'
+import InlineTextEditor from './InlineTextEditor'
+import { NotePopover, LinkPopover, type PopAt } from './ObjectPopovers'
 
 interface Props {
   page: PageRef
   zoom: number
 }
-
-type HandleId = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
 
 interface DragState {
   kind: 'move' | 'resize' | 'draw' | 'shape' | 'link' | 'rotate'
@@ -42,7 +39,7 @@ interface DragState {
   wasSelected?: boolean
 }
 
-const SEL_BLUE = '#3b82f6'
+const SEL_BLUE = ui.selection
 /** 텍스트 선택 박스: 글자에 바짝 붙지 않게 상하좌우로 띄우는 시각 여백(px) */
 const TEXT_SEL_PAD = 7
 
@@ -57,7 +54,35 @@ const HANDLE_DOT_SX = {
   touchAction: 'none'
 } as const
 
-/** 선택 핸들(파란 점) 배치: 모서리 4 + 변 중간 4 = 8개 (pdfguru 스타일). sx 는 정적이라 미리 만들어 둔다 */
+/**
+ * 터치(pointer: coarse): 핸들 상자를 36px 투명 히트 영역으로 키우고 점(12px)은 ::after 로 그린다 — 9px 점은 손가락으로 못 잡았다.
+ * 마우스는 그대로 9px. 상자 자체가 커지므로 getBoundingClientRect 도 36 이다
+ */
+const COARSE_HIT = 36
+const COARSE_HANDLE_SX = {
+  '@media (pointer: coarse)': {
+    width: COARSE_HIT,
+    height: COARSE_HIT,
+    bgcolor: 'transparent',
+    border: 0,
+    boxShadow: 'none',
+    '&::after': {
+      content: '""',
+      position: 'absolute',
+      left: '50%',
+      top: '50%',
+      width: 12,
+      height: 12,
+      transform: 'translate(-50%, -50%)',
+      borderRadius: '50%',
+      bgcolor: SEL_BLUE,
+      border: '1.5px solid #fff',
+      boxShadow: '0 0 3px rgba(0,0,0,.25)'
+    }
+  }
+} as const
+
+/** 선택 핸들(파란 점) 배치: 모서리 4 + 변 중간 4 = 8개. sx 는 정적이라 미리 만들어 둔다 */
 const HANDLES: { id: HandleId; sx: SxProps<Theme> }[] = (
   [
     ['nw', '0%', '0%', 'nwse-resize'],
@@ -71,7 +96,7 @@ const HANDLES: { id: HandleId; sx: SxProps<Theme> }[] = (
   ] as [HandleId, string, string, string][]
 ).map(([id, left, top, cursor]) => ({
   id,
-  sx: { ...HANDLE_DOT_SX, left, top, cursor, transform: 'translate(-50%, -50%)', width: 9, height: 9 }
+  sx: { ...HANDLE_DOT_SX, left, top, cursor, transform: 'translate(-50%, -50%)', width: 9, height: 9, ...COARSE_HANDLE_SX }
 }))
 
 /** editText 스팬 하이라이트 상자 공통 스타일 */
@@ -97,14 +122,6 @@ function rectSx(r: Rect, padPx = 0): { left: string; top: string; width: string;
   }
 }
 
-/**
- * 회전 손잡이 전용 커서: 원형 화살표.
- * SVG 커서는 1배율로만 래스터돼 고해상도에서 흐릿하다 → image-set 으로 2x 비트맵을 함께 제공.
- * 흰 외곽선(paint-order: stroke)으로 어두운 배경에서도 또렷하게.
- */
-const rotateCursorSvg = (px: number): string =>
-  `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='${px}' height='${px}' viewBox='0 0 24 24'%3E%3Cpath d='M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-8 8s3.57 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z' fill='%231f2430' stroke='white' stroke-width='1.6' paint-order='stroke' stroke-linejoin='round'/%3E%3C/svg%3E")`
-const ROTATE_CURSOR = `-webkit-image-set(${rotateCursorSvg(24)} 1x, ${rotateCursorSvg(48)} 2x) 12 12, grab`
 const ROTATE_HANDLE_SX = {
   ...HANDLE_DOT_SX,
   left: '50%',
@@ -113,99 +130,26 @@ const ROTATE_HANDLE_SX = {
   transform: 'translate(-50%, -1px)',
   width: 11,
   height: 11,
-  cursor: ROTATE_CURSOR
+  cursor: ROTATE_CURSOR,
+  // 터치: 36px 히트 영역, 점 중심은 원래 자리(막대 끝 + 5.5px)
+  ...COARSE_HANDLE_SX,
+  '@media (pointer: coarse)': { ...COARSE_HANDLE_SX['@media (pointer: coarse)'], mt: '24.5px', transform: 'translate(-50%, -50%)' }
 } as const
 const ROTATE_STICK_SX = { position: 'absolute', left: '50%', top: '100%', width: '1.5px', height: 20, bgcolor: SEL_BLUE, transform: 'translateX(-50%)' } as const
 
-/** 그리기 지우개 커서: 속이 빈 원 (지우개 브러시 — Guru 동작). 흰 외곽선으로 어두운 배경에서도 보이게 */
-const eraseCursorSvg = (px: number): string =>
-  `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='${px}' height='${px}' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='8.5' fill='none' stroke='white' stroke-width='3.2'/%3E%3Ccircle cx='12' cy='12' r='8.5' fill='none' stroke='%231f2430' stroke-width='1.5'/%3E%3C/svg%3E")`
-const ERASE_CURSOR = `-webkit-image-set(${eraseCursorSvg(24)} 1x, ${eraseCursorSvg(48)} 2x) 12 12, auto`
 
-/** X/체크 도구 커서: 배치될 모양·크기 그대로 노출한다 (px = 화면상 배치 크기와 1:1). */
-const MARK_VISUAL_RATIO = 0.75 // viewBox 안에서 마크가 차지하는 비율 (여백 = 흰 외곽선용)
-const markCursorSvg = (kind: 'cross' | 'check', color: string, px: number): string => {
-  const stroke = color || '#111111'
-  const path =
-    kind === 'cross'
-      ? "<path d='M4 4 L28 28 M28 4 L4 28' />"
-      : "<path d='M4 17 L13 26 L28 6' />"
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${px}' height='${px}' viewBox='0 0 32 32'><g fill='none' stroke-linecap='round' stroke-linejoin='round'><g stroke='white' stroke-width='6'>${path}</g><g stroke='${stroke}' stroke-width='3.4'>${path}</g></g></svg>`
-  return `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}")`
-}
-/** markPx = 화면에 찍힐 마크의 px 크기 → 커서 박스는 외곽선 여백만큼 키우고 중앙 핫스팟 */
-const MARK_CURSOR = (kind: 'cross' | 'check', color: string, markPx: number): string => {
-  const px = Math.min(64, Math.max(16, Math.round(markPx / MARK_VISUAL_RATIO)))
-  const hot = Math.round(px / 2)
-  return `-webkit-image-set(${markCursorSvg(kind, color, px)} 1x, ${markCursorSvg(kind, color, px * 2)} 2x) ${hot} ${hot}, default`
-}
-
-const DEFAULT_SIZE = { w: 595, h: 842 }
-const HIT_TOL = 0.008
-
-/**
- * 히트테스트 사전 거르기용 축정렬 상자 캐시. 객체는 불변(수정 = 새 객체)이라 WeakMap 이 스스로 무효화된다.
- * stroke = 점들의 min/max, 회전 텍스트 = null(회전 상자는 축정렬이 아니라 그냥 정밀 판정으로).
- */
-const bboxCache = new WeakMap<PageObject, Rect | null>()
-function bboxOf(o: PageObject): Rect | null {
-  if (bboxCache.has(o)) return bboxCache.get(o)!
-  let r: Rect | null
-  if (o.type === 'stroke') {
-    let x0 = Infinity
-    let y0 = Infinity
-    let x1 = -Infinity
-    let y1 = -Infinity
-    for (const [px, py] of o.points) {
-      if (px < x0) x0 = px
-      if (px > x1) x1 = px
-      if (py < y0) y0 = py
-      if (py > y1) y1 = py
-    }
-    r = o.points.length === 0 ? null : { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
-  } else if (o.type === 'text' && o.rotation) {
-    r = null
-  } else {
-    r = objectRect(o)
-  }
-  bboxCache.set(o, r)
-  return r
-}
-
-/** hitTest 와 결과가 같되, 상자 밖이면 점 루프 없이 바로 거른다 (stroke 는 tol + 선폭/2 만큼 부풀림) */
-function fastHit(o: PageObject, x: number, y: number, aspect: number): boolean {
-  const b = bboxOf(o)
-  if (b) {
-    const pad = HIT_TOL + (o.type === 'stroke' ? o.width / 2 : 0)
-    if (x < b.x - pad || x > b.x + b.w + pad || y < b.y - pad || y > b.y + b.h + pad) return false
-  } else if (o.type === 'stroke') {
-    return false // 점이 없는 선
-  }
-  return hitTest(o, x, y, HIT_TOL, aspect)
-}
-
-/** 위(마지막)에서부터 첫 히트 — 배열 복사 없이 역순 순회 */
-function topHit(objects: PageObject[], x: number, y: number, aspect: number, only?: PageObject['type']): PageObject | null {
-  for (let i = objects.length - 1; i >= 0; i--) {
-    const o = objects[i]
-    if ((!only || o.type === only) && fastHit(o, x, y, aspect)) return o
-  }
-  return null
-}
-
-const inSpan = (sp: TextSpan, x: number, y: number): boolean =>
-  x >= sp.rect.x && x <= sp.rect.x + sp.rect.w && y >= sp.rect.y && y <= sp.rect.y + sp.rect.h
 
 /** 페이지 1장 = PDF 캔버스 + 객체 오버레이 + 인터랙션 레이어 */
 function PageCanvas({ page, zoom }: Props): JSX.Element {
   const t = useT()
   // 도구 스타일(펜/도형/텍스트 등)은 구독하지 않는다 — 포인터 이벤트 시점에 getState() 로 읽는다.
   // 슬라이더 하나 움직일 때 페이지 전부가 다시 렌더·재그리기되는 것을 막고, 항상 최신값을 보장한다.
-  const size = useEditor((s) => s.displaySizes[page.id]) ?? DEFAULT_SIZE
+  const size = useEditor((s) => s.displaySizes[page.id]) ?? DEFAULT_PAGE_SIZE
   const objects = useEditor((s) => s.objectsByPage[page.id] ?? EMPTY)
   const tool = useEditor((s) => s.tool)
   const setTool = useEditor((s) => s.setTool)
-  const selected = useEditor((s) => s.selected)
+  // 선택·마크 스타일·현재 검색 일치는 "이 페이지에 해당할 때만" 구독 — 다른 페이지의 선택/슬라이더/검색 이동에 N 페이지가 재렌더되지 않게
+  const selected = useEditor((s) => (s.selected?.pageId === page.id ? s.selected : null))
   const setSelected = useEditor((s) => s.setSelected)
   const addObject = useEditor((s) => s.addObject)
   const addObjectTransient = useEditor((s) => s.addObjectTransient)
@@ -215,11 +159,14 @@ function PageCanvas({ page, zoom }: Props): JSX.Element {
   const removeObjectTransient = useEditor((s) => s.removeObjectTransient)
   const replaceObjects = useEditor((s) => s.replaceObjects)
   const markHistory = useEditor((s) => s.markHistory)
-  const markStyle = useEditor((s) => s.markStyle)
+  const markStyle = useEditor((s) => (s.tool === 'cross' || s.tool === 'check' ? s.markStyle : null))
   const setPendingImage = useEditor((s) => s.setPendingImage)
   // 검색: 이 페이지의 일치만 구독 (store 가 페이지별로 미리 묶어둔 배열 → 참조 안정, 다른 페이지 결과엔 무반응)
   const searchMatches = useEditor((s) => s.search.matchesByPage[page.id] ?? EMPTY_MATCHES)
-  const currentMatch = useEditor((s) => s.search.matches[s.search.current])
+  const currentMatch = useEditor((s) => {
+    const m = s.search.matches[s.search.current]
+    return m?.pageId === page.id ? m : null
+  })
 
   const cssW = size.w * zoom
   const cssH = size.h * zoom
@@ -242,11 +189,9 @@ function PageCanvas({ page, zoom }: Props): JSX.Element {
   /** editText 도구: 추출된 스팬 */
   const [spans, setSpans] = useState<TextSpan[] | null>(null)
   /** 노트 팝업 */
-  const [notePop, setNotePop] = useState<{ objectId: string; x: number; y: number } | null>(null)
-  /** 링크 설정 팝업 */
-  const [linkPop, setLinkPop] = useState<{ objectId: string; x: number; y: number } | null>(null)
-  const [linkKind, setLinkKind] = useState<'url' | 'page'>('url')
-  const [linkValue, setLinkValue] = useState('')
+  const [notePop, setNotePop] = useState<({ objectId: string } & PopAt) | null>(null)
+  /** 링크 설정 팝업 (폼 상태는 팝업 안에서 객체의 현재 대상으로 초기화) */
+  const [linkPop, setLinkPop] = useState<({ objectId: string } & PopAt) | null>(null)
 
   /** id → 객체 (렌더당 O(n) find 여러 번 대신 한 번) + 낙서 유무 */
   const { byId, hasStrokes } = useMemo(() => {
@@ -326,8 +271,7 @@ function PageCanvas({ page, zoom }: Props): JSX.Element {
       if (previews.length > 0) drawObjects(ctx, previews, W, H, 'editor')
     }
     // 이미지가 전부 디코드돼 있으면 동기로 바로 그린다 (드래그 중 마이크로태스크 홉 없음)
-    const missing: string[] = []
-    for (const o of objects) if ((o.type === 'image' || o.type === 'watermark') && !cachedImage(o.dataUrl)) missing.push(o.dataUrl)
+    const missing = imageUrlsOf(objects).filter((u) => !cachedImage(u))
     if (missing.length === 0) {
       paint()
       return
@@ -362,32 +306,9 @@ function PageCanvas({ page, zoom }: Props): JSX.Element {
     redrawOverlay()
   }, [objects, cssW, cssH, zoom, visible, editing?.objectId])
 
-  // ── PDF 본문 렌더 ──
-  useEffect(() => {
-    const canvas = baseRef.current
-    if (!visible || !canvas || zoom <= 0) return
-    const dpr = Math.min(window.devicePixelRatio || 1, 2)
-    const ac = new AbortController()
-    let task: RenderTask | undefined
-    // 렌더 완료 후 오버레이 재그리기 — 혼합 모드 백드롭이 빈 페이지로 굳지 않게
-    renderPage(page, canvas, zoom * dpr, {
-      signal: ac.signal,
-      onTask: (t) => {
-        task = t
-        if (ac.signal.aborted) t.cancel()
-      }
-    }).then(
-      () => {
-        if (!ac.signal.aborted) scheduleRedraw()
-      },
-      () => {} // RenderingCancelledException(줌 연타로 이전 렌더 취소) — 정상 경로
-    )
-    return () => {
-      // 같은 캔버스에 새 렌더가 걸리기 전에 진행 중 pdf.js 렌더를 끊는다
-      ac.abort()
-      task?.cancel()
-    }
-  }, [visible, page, page.extraRotation, zoom])
+
+  // ── PDF 본문 렌더 (보일 때만). 완료 후 오버레이 재그리기 — 혼합 모드 백드롭이 빈 페이지로 굳지 않게 ──
+  usePageRender(baseRef, page, zoom * Math.min(window.devicePixelRatio || 1, 2), visible && zoom > 0, scheduleRedraw)
 
   function transientStroke(points: [number, number][]): StrokeObj {
     const s = useEditor.getState()
@@ -403,9 +324,9 @@ function PageCanvas({ page, zoom }: Props): JSX.Element {
     return { id: 'transient', type: 'shape', kind, rect, stroke: st.stroke, strokeWidth: st.strokeWidth, fill: st.fill, opacity: st.opacity, dash: st.dash }
   }
 
-  // ── editText: 도구 선택 시 스팬 로드 ──
+  // ── editText: 도구 선택 시 보이는 페이지만 스팬 로드 (500쪽 문서에서 워커 요청 500개가 한꺼번에 큐잉되지 않게) ──
   useEffect(() => {
-    if (tool !== 'editText') {
+    if (tool !== 'editText' || !visible) {
       setSpans(null)
       return
     }
@@ -416,7 +337,7 @@ function PageCanvas({ page, zoom }: Props): JSX.Element {
     return () => {
       alive = false
     }
-  }, [tool, page, page.extraRotation])
+  }, [tool, visible, page, page.extraRotation])
 
   /** 아직 editText 객체의 cover 가 덮지 않은 스팬 (하이라이트 표시·클릭 대상). 렌더마다 다시 걸러내지 않는다 */
   const freeSpans = useMemo(() => {
@@ -447,122 +368,19 @@ function PageCanvas({ page, zoom }: Props): JSX.Element {
   const editingObj = editing ? (byId.get(editing.objectId) ?? null) : null
 
   /**
-   * 그리기 지우개: 브러시가 지나간 경로(선분 x0,y0→x1,y1)에 닿은 "구간만" 지운다 — 선 전체가 아니라.
-   * 닿은 점을 걷어내고 남은 연속 구간들을 각각 새 선으로 분리. 제스처당 히스토리 1단계(dragRef.moved).
-   * 선분 판정인 이유: pointermove 가 병합되면 샘플 간격이 브러시보다 넓어져 중간이 건너뛰어진다.
-   * 결과는 스토어 갱신 한 번(replaceObjects)으로 반영 — 닿은 선을 제거하고 남은 구간들을 뒤에 붙인다.
+   * 그리기 지우개: 브러시가 지나간 경로(선분 x0,y0→x1,y1)에 닿은 "구간만" 지운다 — 계산은 erase.ts(순수).
+   * 제스처당 히스토리 1단계(dragRef.moved). 결과는 스토어 갱신 한 번(replaceObjects)으로 반영.
    */
   function eraseStrokesAlong(x0: number, y0: number, x1: number, y1: number): void {
-    // px 공간 선분-점 거리 (aspect 보정)
-    const ax = x0 * aspect
-    const ay = y0
-    const dxs = x1 * aspect - ax
-    const dys = y1 - ay
-    const len2 = dxs * dxs + dys * dys
-    const distToPath = (p: [number, number]): number => {
-      const px = p[0] * aspect
-      const py = p[1]
-      const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dxs + (py - ay) * dys) / len2))
-      return Math.hypot(px - (ax + dxs * t), py - (ay + dys * t))
-    }
-    // 브러시가 쓸고 간 선분의 축정렬 상자(정규화) — 이 밖의 선은 점 루프 없이 거른다
-    const sx0 = Math.min(x0, x1)
-    const sx1 = Math.max(x0, x1)
-    const sy0 = Math.min(y0, y1)
-    const sy1 = Math.max(y0, y1)
     // 렌더 클로저의 objects 는 연속 pointermove 에서 stale 해질 수 있다 → 스토어에서 직접
     const live = useEditor.getState().objectsByPage[page.id] ?? []
-    const kept: PageObject[] = []
-    const added: PageObject[] = []
-    for (const o of live) {
-      if (o.type !== 'stroke') {
-        kept.push(o)
-        continue
-      }
-      const rr = 0.012 + o.width / 2
-      const b = bboxOf(o)
-      // 거리 판정은 px 공간(x·aspect)이라 x 여유는 rr/aspect — 보수적으로 걸러 결과는 동일
-      const near =
-        b !== null && b.x - rr / aspect <= sx1 && b.x + b.w + rr / aspect >= sx0 && b.y - rr <= sy1 && b.y + b.h + rr >= sy0
-      const hitAt = (p: [number, number]): boolean => distToPath(p) < rr
-      if (!near || !o.points.some(hitAt)) {
-        kept.push(o)
-        continue
-      }
-      if (dragRef.current && !dragRef.current.moved) {
-        markHistory()
-        dragRef.current.moved = true
-      }
-      // 점이 드문 선(특히 형광펜)은 한 점만 지워도 긴 구간이 통째로 사라져 뭉텅이로 보인다
-      // → 지우기 전에 점을 촘촘히 보간해 브러시가 닿은 만큼만 매끄럽게 잘리게 한다
-      const maxStep = 0.004
-      const dense: [number, number][] = []
-      for (let i = 0; i < o.points.length; i++) {
-        if (i > 0) {
-          const q = o.points[i - 1]
-          const p = o.points[i]
-          const seg = Math.hypot((p[0] - q[0]) * aspect, p[1] - q[1])
-          const n = Math.floor(seg / maxStep)
-          for (let k = 1; k <= n; k++) {
-            dense.push([q[0] + ((p[0] - q[0]) * k) / (n + 1), q[1] + ((p[1] - q[1]) * k) / (n + 1)])
-          }
-        }
-        dense.push(o.points[i])
-      }
-      // 살아남은 연속 구간으로 분할
-      let cur: [number, number][] = []
-      const flush = (): void => {
-        if (cur.length >= 2) added.push({ ...o, id: newId(), points: cur })
-        cur = []
-      }
-      for (const p of dense) {
-        if (hitAt(p)) flush()
-        else cur.push(p)
-      }
-      flush()
+    const r = splitStrokesAlong(live, { x0, y0, x1, y1 }, { aspect, cssH })
+    if (!r.touched) return
+    if (dragRef.current && !dragRef.current.moved) {
+      markHistory()
+      dragRef.current.moved = true
     }
-    if (added.length > 0 || kept.length !== live.length) replaceObjects(page.id, kept.concat(added))
-  }
-
-  /** 클릭 지점(정규화)이 텍스트의 몇 번째 글자 앞인지 — 캐럿 초기 위치용 */
-  function caretIndexFor(obj: TextObj | EditTextObj, xN: number, yN: number): number {
-    const isText = obj.type === 'text'
-    const rect = isText ? textBoxRect(obj) : obj.box
-    // 회전 텍스트는 클릭점을 상자 로컬(비회전) 공간으로 역회전
-    const [px, py] = isText && obj.rotation ? unrotatePoint(xN, yN, rect.x + rect.w / 2, rect.y + rect.h / 2, obj.rotation, aspect) : [xN, yN]
-    const localX = (px - rect.x) * cssW
-    let localY = (py - rect.y) * cssH
-    const lhPx = obj.size * cssH * 1.25
-    const lines = obj.text.split('\n')
-    if (isText) {
-      const blockH = lines.length * lhPx
-      const boxH = rect.h * cssH
-      localY -= obj.valign === 'middle' ? (boxH - blockH) / 2 : obj.valign === 'bottom' ? boxH - blockH : 0
-    }
-    const li = Math.max(0, Math.min(lines.length - 1, Math.floor(localY / lhPx)))
-    const line = lines[li]
-    const widthOf = (n: number): number => (n === 0 ? 0 : measureTextWidthPx(line.slice(0, n), obj.size, obj.font, obj.bold, obj.italic, cssH))
-    let startX = 0
-    if (isText && obj.align !== 'left') {
-      const lineW = widthOf(line.length)
-      startX = obj.align === 'center' ? (rect.w * cssW - lineW) / 2 : rect.w * cssW - lineW
-    }
-    // 접두 폭은 단조 증가 → "클릭점이 i번째 글자의 중간보다 왼쪽" 인 첫 i 를 이진 탐색 (측정 O(log L))
-    const memo = new Map<number, number>()
-    const w = (n: number): number => {
-      let v = memo.get(n)
-      if (v === undefined) memo.set(n, (v = widthOf(n)))
-      return v
-    }
-    const before = (i: number): boolean => localX < startX + (w(i) + w(Math.min(i + 1, line.length))) / 2
-    let lo = 0
-    let hi = line.length
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1
-      if (before(mid)) hi = mid
-      else lo = mid + 1
-    }
-    return lines.slice(0, li).reduce((n, l) => n + l.length + 1, 0) + lo
+    replaceObjects(page.id, r.objects)
   }
 
   function commitEditing(): void {
@@ -616,7 +434,7 @@ function PageCanvas({ page, zoom }: Props): JSX.Element {
 
     // 이미지/스탬프/서명 배치
     if (pendingImage) {
-      const wN = pendingImage.kind === 'sign' ? 0.28 : 0.32
+      const wN = pendingImage.kind === 'sign' ? SIGN_PLACE_W : IMAGE_PLACE_W
       const hN = (wN * size.w) / pendingImage.aspect / size.h
       const obj: PageObject = {
         id: newId(),
@@ -644,11 +462,7 @@ function PageCanvas({ page, zoom }: Props): JSX.Element {
             setNotePop({ objectId: hit.id, x: e.clientX, y: e.clientY })
             return
           }
-          if (hit.type === 'link') {
-            setLinkKind(hit.target.kind)
-            setLinkValue(hit.target.kind === 'url' ? hit.target.url : String(hit.target.page))
-            setLinkPop({ objectId: hit.id, x: e.clientX, y: e.clientY })
-          }
+          if (hit.type === 'link') setLinkPop({ objectId: hit.id, x: e.clientX, y: e.clientY })
         } else {
           setSelected(null)
         }
@@ -706,9 +520,10 @@ function PageCanvas({ page, zoom }: Props): JSX.Element {
             origText: span.text,
             size: span.size,
             color: textStyle.color,
-            font: textStyle.font,
-            bold: textStyle.bold,
-            italic: textStyle.italic,
+            // 원본 서체·굵기·기울임을 승계 (pdf.js 폰트 메타). 못 읽으면 툴바 기본값
+            font: span.font ?? textStyle.font,
+            bold: span.bold ?? textStyle.bold,
+            italic: span.italic ?? textStyle.italic,
             opacity: 1
           }
           addObject(page.id, obj) // 세션 중이므로 히스토리 없이 버퍼에 쌓인다 (저장/취소는 세션 종료 때)
@@ -737,14 +552,14 @@ function PageCanvas({ page, zoom }: Props): JSX.Element {
         break
       case 'cross':
       case 'check': {
-        // 찍기 전 컨텍스트 바에서 정한 크기·색 그대로 (커서 크기와 1:1)
-        const s = markStyle.size
+        // 찍기 전 컨텍스트 바에서 정한 크기·색 그대로 (커서 크기와 1:1). 이 도구일 땐 markStyle 이 구독돼 있다
+        const s = markStyle!.size
         addObject(page.id, {
           id: newId(),
           type: 'shape',
           kind: tool,
           rect: { x: x - s / 2, y: y - (s * size.w) / size.h / 2, w: s, h: (s * size.w) / size.h },
-          stroke: markStyle.color,
+          stroke: markStyle!.color,
           strokeWidth: shapeStyle.strokeWidth,
           fill: null,
           opacity: shapeStyle.opacity
@@ -811,7 +626,7 @@ function PageCanvas({ page, zoom }: Props): JSX.Element {
     if (d.kind === 'move' && !d.moved && d.wasSelected && d.orig && (d.orig.type === 'text' || d.orig.type === 'editText')) {
       const [x, y] = norm(e)
       setEditValue(d.orig.text)
-      setEditing({ objectId: d.orig.id, isNew: false, caret: caretIndexFor(d.orig, x, y) })
+      setEditing({ objectId: d.orig.id, isNew: false, caret: caretIndexAt(d.orig, x, y, { aspect, cssW, cssH }) })
       bump()
       return
     }
@@ -827,8 +642,6 @@ function PageCanvas({ page, zoom }: Props): JSX.Element {
       const obj: LinkObj = { id: newId(), type: 'link', rect: d.rect, target: { kind: 'url', url: '' }, opacity: 1 }
       addObject(page.id, obj)
       setSelected({ pageId: page.id, objectId: obj.id })
-      setLinkKind('url')
-      setLinkValue('')
       setLinkPop({ objectId: obj.id, x: e.clientX, y: e.clientY })
       setTool('select')
     }
@@ -879,54 +692,7 @@ function PageCanvas({ page, zoom }: Props): JSX.Element {
     if (d.kind !== 'resize' || !d.handle) return
 
     if (d.orig.type === 'text') {
-      const o = d.orig
-      const r0 = textBoxRect(o)
-      const cx = r0.x + r0.w / 2
-      const cy = r0.y + r0.h / 2
-      // 시작점 대비 이동량(delta) 기반 — 시각 여백(TEXT_SEL_PAD)·최소폭과 무관하게 튐 없이 동작.
-      // 회전돼 있으면 포인터를 상자 로컬(비회전) 공간으로 역회전해 판정.
-      const rot = o.rotation ?? 0
-      const unrot = (px: number, py: number): [number, number] => (rot ? unrotatePoint(px, py, cx, cy, rot, aspect) : [px, py])
-      const [ux, uy] = unrot(x, y)
-      const [sx, sy] = unrot(d.startX, d.startY)
-      if (d.handle === 'e' || d.handle === 'w') {
-        // 좌우 중간점 = 상자 폭
-        const dxu = ux - sx
-        const w0 = o.w > 0 ? o.w : 0.1
-        if (d.handle === 'e') {
-          updateObjectTransient(page.id, d.objectId, { w: Math.max(0.04, w0 + dxu) } as Partial<PageObject>)
-        } else {
-          const right = o.x + w0
-          const nx = Math.min(o.x + dxu, right - 0.04)
-          updateObjectTransient(page.id, d.objectId, { x: nx, w: right - nx } as Partial<PageObject>)
-        }
-      } else if (d.handle === 'n' || d.handle === 's') {
-        // 상하 중간점 = 상자 높이 (내용 높이보다 작아질 수 없음 — 세로 정렬이 의미를 가짐)
-        const dyu = uy - sy
-        const minH = textContentHeight(o)
-        const h0 = r0.h
-        if (d.handle === 's') {
-          updateObjectTransient(page.id, d.objectId, { h: Math.max(minH, h0 + dyu) } as Partial<PageObject>)
-        } else {
-          const bottom = o.y + h0
-          const ny = Math.min(o.y + dyu, bottom - minH)
-          updateObjectTransient(page.id, d.objectId, { y: ny, h: bottom - ny } as Partial<PageObject>)
-        }
-      } else {
-        // 모서리 = 글자 크기 스케일 (중심 고정 — 회전과 무관하게 동작). 상자 폭·높이도 같은 비율로
-        const d0 = Math.max(1e-6, Math.hypot((d.startX - cx) * aspect, d.startY - cy))
-        const d1 = Math.hypot((x - cx) * aspect, y - cy)
-        const size = Math.min(0.2, Math.max(0.006, o.size * (d1 / d0)))
-        const f = size / o.size
-        const w = o.w * f
-        updateObjectTransient(page.id, d.objectId, {
-          size,
-          w,
-          h: o.h > 0 ? o.h * f : 0,
-          x: cx - (w > 0 ? w : 0.1) / 2,
-          y: cy - (r0.h * f) / 2
-        } as Partial<PageObject>)
-      }
+      updateObjectTransient(page.id, d.objectId, resizeTextPatch(d.orig, d.handle, [d.startX, d.startY], [x, y], aspect))
       return
     }
 
@@ -951,29 +717,13 @@ function PageCanvas({ page, zoom }: Props): JSX.Element {
     if (dragRef.current?.kind === 'resize' || dragRef.current?.kind === 'rotate') dragRef.current = null
   }
 
-  // 커서 규칙 (Guru): 객체/스팬 호버 = 포인터(👆), 잡고 있는 동안·드래그 = 이동(✥), 그 외 도구별
   const movingNow = dragRef.current?.kind === 'move' && !!dragRef.current.objectId
-  const cursor = movingNow
-    ? 'move'
-    : tool === 'hand'
-      ? 'grab'
-      : tool === 'select' || tool === 'editText'
-        ? hoverHit
-          ? 'pointer'
-          : 'default'
-        : tool === 'addText'
-          ? 'text'
-          : tool === 'eraseDrawing'
-            ? hasStrokes
-              ? ERASE_CURSOR // 낙서가 있어야 지우개 원이 뜬다 (없으면 기본 커서)
-              : 'default'
-            : tool === 'highlight'
-              ? ERASE_CURSOR // 형광펜도 빈 원 브러시 커서 (사용자 요청)
-              : tool === 'cross' || tool === 'check'
-                ? MARK_CURSOR(tool, markStyle.color, markStyle.size * size.w * zoom)
-                : tool === 'watermark'
-                  ? 'default' // 클릭 배치 도구가 아니므로 + 커서를 쓰지 않는다 (2026-07-10 피드백)
-                  : 'crosshair'
+  // X/체크 커서는 SVG 문자열 2개를 만들므로 입력이 같으면 재사용
+  const markCursor = useMemo(
+    () => ((tool === 'cross' || tool === 'check') && markStyle ? MARK_CURSOR(tool, markStyle.color, markStyle.size * size.w * zoom) : null),
+    [tool, markStyle, size.w, zoom]
+  )
+  const cursor = cursorFor({ tool, movingNow, hoverHit, hasStrokes, markCursor })
 
   const noteObj = notePop ? (byId.get(notePop.objectId) as NoteObj | undefined) : undefined
   const linkObj = linkPop ? (byId.get(linkPop.objectId) as LinkObj | undefined) : undefined
@@ -1027,85 +777,22 @@ function PageCanvas({ page, zoom }: Props): JSX.Element {
         </Box>
       )}
 
-      {/* 인라인 텍스트 편집기 — 내용만큼 자라는 상자 (pdfguru 스타일) */}
-      {editing &&
-        editingObj &&
-        (editingObj.type === 'text' || editingObj.type === 'editText') &&
-        (() => {
-          const fontPx = editingObj.size * cssH
-          const isText = editingObj.type === 'text'
-          // 테두리·패딩만큼 왼쪽 위로 당겨서, 확정 후 캔버스에 그려질 위치와 글자가 정확히 겹치게 한다
-          const padX = 6
-          const padY = 4
-          const bw = 1
-          const textW = measureTextWidthPx(editValue, editingObj.size, editingObj.font, editingObj.bold, editingObj.italic, cssH)
-          const lineCount = editValue.split('\n').length
-          // editText 는 최소 원본 상자 폭, 그 외엔 내용 실측 폭 (textarea 기본 rows/cols 크기 방지)
-          const minWpx = isText ? 0 : editingObj.box.w * cssW
-          const innerW = Math.max(textW + Math.max(4, fontPx * 0.15), fontPx * 0.9, minWpx)
-          // 상자 높이(h)가 내용보다 크면 세로 정렬 위치에 입력창을 띄운다 (그려질 위치와 일치)
-          const contentHpx = lineCount * fontPx * 1.25
-          const boxHpx = isText && editingObj.h > 0 ? Math.max(editingObj.h * cssH, contentHpx) : contentHpx
-          const vOff = !isText ? 0 : editingObj.valign === 'middle' ? (boxHpx - contentHpx) / 2 : editingObj.valign === 'bottom' ? boxHpx - contentHpx : 0
-          return (
-            <textarea
-              autoFocus
-              wrap="off"
-              spellCheck={false}
-              ref={(el) => {
-                // 클릭 지점에 캐럿 배치 (최초 1회만 — 이후 타이핑 캐럿을 건드리지 않는다)
-                if (el && editing.caret != null && el.dataset.caretApplied !== '1') {
-                  el.dataset.caretApplied = '1'
-                  const c = Math.min(editing.caret, el.value.length)
-                  el.setSelectionRange(c, c)
-                }
-              }}
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              onBlur={commitEditing}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') {
-                  e.preventDefault()
-                  if (editing.isNew) removeObjectTransient(page.id, editing.objectId)
-                  setEditing(null)
-                }
-              }}
-              style={{
-                position: 'absolute',
-                left: `${(isText ? editingObj.x : editingObj.box.x) * 100}%`,
-                top: `calc(${(isText ? editingObj.y : editingObj.box.y) * 100}% + ${vOff}px)`,
-                marginLeft: -(padX + bw),
-                marginTop: -(padY + bw),
-                boxSizing: 'border-box',
-                width: innerW + (padX + bw) * 2,
-                height: lineCount * fontPx * 1.25 + (padY + bw) * 2,
-                padding: `${padY}px ${padX}px`,
-                fontSize: fontPx,
-                fontFamily: fontCss(editingObj.font),
-                fontWeight: editingObj.bold ? 700 : 400,
-                fontStyle: editingObj.italic ? 'italic' : 'normal',
-                textDecoration: isText && editingObj.underline ? 'underline' : undefined,
-                textAlign: isText ? editingObj.align : undefined,
-                transform: isText && editingObj.rotation ? `rotate(${editingObj.rotation}deg)` : undefined,
-                transformOrigin: 'center center',
-                color: editingObj.color,
-                caretColor: '#111',
-                lineHeight: 1.25,
-                // "입력 팝업" 느낌 제거: 얇은 테두리만, 그림자 없음, 배경은 제자리 그대로
-                // (editText 는 원본 글자를 덮어야 하므로 흰 배경 유지)
-                border: `${bw}px solid #7aabf0`,
-                borderRadius: 2,
-                outline: 'none',
-                background: isText ? (editingObj.bgColor ?? 'transparent') : '#fff',
-                resize: 'none',
-                margin: 0,
-                overflow: 'hidden',
-                whiteSpace: 'pre',
-                zIndex: 5
-              }}
-            />
-          )
-        })()}
+      {/* 인라인 텍스트 편집기 — 내용만큼 자라는 상자 */}
+      {editing && editingObj && (editingObj.type === 'text' || editingObj.type === 'editText') && (
+        <InlineTextEditor
+          obj={editingObj}
+          value={editValue}
+          cssW={cssW}
+          cssH={cssH}
+          caret={editing.caret}
+          onChange={setEditValue}
+          onCommit={commitEditing}
+          onCancel={() => {
+            if (editing.isNew) removeObjectTransient(page.id, editing.objectId)
+            setEditing(null)
+          }}
+        />
+      )}
 
       {/* 인터랙션 레이어 */}
       <Box
@@ -1116,97 +803,32 @@ function PageCanvas({ page, zoom }: Props): JSX.Element {
         onPointerUp={onPointerUp}
       />
 
-      {/* 노트 편집 팝업 */}
-      <Popover
-        open={!!notePop && !!noteObj}
-        anchorReference="anchorPosition"
-        anchorPosition={notePop ? { left: notePop.x, top: notePop.y } : undefined}
+      <NotePopover
+        obj={noteObj}
+        at={notePop}
         onClose={() => setNotePop(null)}
-      >
-        <Box sx={{ p: 1.5, width: 260, bgcolor: noteObj?.color ?? '#facc15' }}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-            <strong style={{ fontSize: 13 }}>{t('noteTitle')}</strong>
-            <IconButton
-              size="small"
-              onClick={() => {
-                if (notePop) removeObject(page.id, notePop.objectId)
-                setNotePop(null)
-              }}
-            >
-              <Trash2 fontSize="small" />
-            </IconButton>
-          </Stack>
-          <TextField
-            multiline
-            minRows={4}
-            fullWidth
-            autoFocus
-            variant="standard"
-            placeholder={t('notePlaceholder')}
-            defaultValue={noteObj?.text ?? ''}
-            onBlur={(e) => {
-              if (notePop) updateObject(page.id, notePop.objectId, { text: e.target.value })
-            }}
-            sx={{ '& .MuiInputBase-root': { fontSize: 13 } }}
-          />
-        </Box>
-      </Popover>
-
-      {/* 링크 설정 팝업 */}
-      <Popover
-        open={!!linkPop && !!linkObj}
-        anchorReference="anchorPosition"
-        anchorPosition={linkPop ? { left: linkPop.x, top: linkPop.y } : undefined}
+        onRemove={() => {
+          if (notePop) removeObject(page.id, notePop.objectId)
+          setNotePop(null)
+        }}
+        onChange={(text) => {
+          if (notePop) updateObject(page.id, notePop.objectId, { text })
+        }}
+      />
+      <LinkPopover
+        obj={linkObj}
+        at={linkPop}
         onClose={() => setLinkPop(null)}
-      >
-        <Box sx={{ p: 2, width: 300 }}>
-          <Stack spacing={1.5}>
-            <strong style={{ fontSize: 13 }}>{t('linkSettings')}</strong>
-            <ToggleButtonGroup size="small" exclusive value={linkKind} onChange={(_, v) => v && setLinkKind(v)} fullWidth>
-              <ToggleButton value="url">{t('website')}</ToggleButton>
-              <ToggleButton value="page">{t('pages')}</ToggleButton>
-            </ToggleButtonGroup>
-            <TextField
-              size="small"
-              autoFocus
-              fullWidth
-              placeholder={linkKind === 'url' ? 'www.example.com' : t('pageNo')}
-              type={linkKind === 'page' ? 'number' : 'text'}
-              value={linkValue}
-              onChange={(e) => setLinkValue(e.target.value)}
-            />
-            <Stack direction="row" spacing={1} justifyContent="flex-end">
-              <Button
-                size="small"
-                color="inherit"
-                onClick={() => {
-                  if (linkPop && linkObj && linkObj.target.kind === 'url' && linkObj.target.url === '') {
-                    removeObject(page.id, linkPop.objectId)
-                  }
-                  setLinkPop(null)
-                }}
-              >
-                {t('cancel')}
-              </Button>
-              <Button
-                size="small"
-                variant="contained"
-                disabled={!linkValue.trim()}
-                onClick={() => {
-                  if (linkPop) {
-                    updateObject(page.id, linkPop.objectId, {
-                      target: linkKind === 'url' ? { kind: 'url', url: linkValue.trim() } : { kind: 'page', page: Number(linkValue) || 1 }
-                    })
-                  }
-                  setLinkPop(null)
-                }}
-              >
-                {t('apply')}
-              </Button>
-            </Stack>
-          </Stack>
-        </Box>
-      </Popover>
+        onCancel={() => {
+          // 대상이 비어 있는(방금 그린) 링크는 취소 = 삭제
+          if (linkPop && linkObj && linkObj.target.kind === 'url' && linkObj.target.url === '') removeObject(page.id, linkPop.objectId)
+          setLinkPop(null)
+        }}
+        onApply={(target) => {
+          if (linkPop) updateObject(page.id, linkPop.objectId, { target })
+          setLinkPop(null)
+        }}
+      />
     </Box>
   )
 }
@@ -1217,9 +839,3 @@ export default memo(PageCanvas)
 const EMPTY: PageObject[] = []
 const EMPTY_MATCHES: SearchMatch[] = []
 
-/** 객체를 dx,dy 만큼 이동한 patch. text 는 위치만(폭·높이 유지), editText 는 cover(원본 가림)를 남기고 box 만 */
-function moveObject(o: PageObject, dx: number, dy: number): Partial<PageObject> {
-  if (o.type === 'text' || o.type === 'note') return { x: o.x + dx, y: o.y + dy } as Partial<PageObject>
-  const r = objectRect(o)
-  return r ? setObjectRect(o, { ...r, x: r.x + dx, y: r.y + dy }) : {}
-}

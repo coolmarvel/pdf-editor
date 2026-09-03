@@ -4,7 +4,7 @@ import { createTheme } from '@mui/material/styles'
  * TailAdmin 디자인 언어를 MUI 테마로 이식한 스킨.
  * 모든 컴포넌트가 이 테마를 공유하므로 여기 한 곳이 "재사용 컴포넌트" 역할을 한다.
  *
- * 2026-08-15: 브랜드 색을 pdfguru 레드 → **딥 포레스트 그린**으로 교체하고,
+ * 브랜드 색은 **딥 포레스트 그린**,
  * 선택 강조색(secondary)도 pdfguru 인디고(#5b5bd6) → 딥 시안으로 바꿔 벤치마크와 분리했다.
  * 배경 그레이도 아주 옅은 녹색 기미를 넣어(캔버스/사이드바) 브랜드와 붙게 했다.
  *
@@ -35,6 +35,8 @@ export const ui = {
     500: '#15803d',
     600: '#126b33'
   },
+  /** 캔버스 선택 외곽선·핸들·링크 영역·팔레트 선택 아웃라인 파랑 */
+  selection: '#3b82f6',
   // 선택/삽입점 강조색 (도구 활성색인 그린과 구분되어야 한다)
   accent: {
     main: '#0e7490',
@@ -74,7 +76,7 @@ export const theme = createTheme({
     MuiButton: {
       defaultProps: { disableElevation: true },
       styleOverrides: {
-        root: { borderRadius: 8, fontWeight: 500, paddingLeft: 16, paddingRight: 16 },
+        root: { borderRadius: 8, fontWeight: 500, paddingLeft: 16, paddingRight: 16, '@media (pointer: coarse)': { minHeight: 40 } },
         contained: {
           boxShadow: ui.shadow.xs,
           '&:hover': { boxShadow: ui.shadow.xs }
@@ -98,7 +100,10 @@ export const theme = createTheme({
     },
     MuiIconButton: {
       styleOverrides: {
-        root: { color: ui.gray[700], '&:hover': { backgroundColor: ui.gray[100] } }
+        root: { color: ui.gray[700], '&:hover': { backgroundColor: ui.gray[100] } },
+        // 터치 환경(pointer: coarse)에서만 small 아이콘 버튼의 터치 타깃을 40px 로 — 마우스(fine)에서는 밀도 그대로.
+        // .gapbtn(썸네일 사이 ⊕ 18px) 은 14px 틈 안에 살아야 하므로 제외
+        sizeSmall: { '@media (pointer: coarse)': { '&:not(.gapbtn)': { minWidth: 40, minHeight: 40 } } }
       }
     },
     // 인풋/셀렉트: rounded-lg + gray-300 보더 + 포커스 브랜드 링 (shadow-theme-xs)
@@ -116,15 +121,16 @@ export const theme = createTheme({
       }
     },
     // 드롭다운/팝오버: rounded-xl + gray-200 보더 + shadow-theme-lg
+    // disableScrollLock: 스크롤 잠금이 body 에 padding-right(스크롤바 폭 추정)를 넣어 좁은 화면에서 페이지가 왼쪽으로 밀렸다. 메뉴·팝오버·다이얼로그 모두 레이아웃을 밀지 않는다
     MuiMenu: {
-      defaultProps: { elevation: 0 },
+      defaultProps: { elevation: 0, disableScrollLock: true },
       styleOverrides: {
         paper: { borderRadius: 12, border: `1px solid ${ui.gray[200]}`, boxShadow: ui.shadow.lg, marginTop: 4 },
         list: { padding: 6 }
       }
     },
     MuiPopover: {
-      defaultProps: { elevation: 0 },
+      defaultProps: { elevation: 0, disableScrollLock: true },
       styleOverrides: {
         paper: { borderRadius: 12, border: `1px solid ${ui.gray[200]}`, boxShadow: ui.shadow.lg }
       }
@@ -139,12 +145,15 @@ export const theme = createTheme({
           color: ui.gray[700],
           '&:hover': { backgroundColor: ui.gray[100] },
           '&.Mui-selected': { backgroundColor: ui.brand[50], color: ui.brand[500] },
-          '&.Mui-selected:hover': { backgroundColor: ui.brand[100] }
+          '&.Mui-selected:hover': { backgroundColor: ui.brand[100] },
+          // 터치(pointer: coarse): 메뉴·Select 옵션 40px 타깃 — MUI 는 sm 이상에서 minHeight auto(34px) 로 돌아가므로 브레이크포인트가 아니라 포인터 종류로. 마우스 밀도 그대로
+          '@media (pointer: coarse)': { minHeight: 40 }
         }
       }
     },
     // 모달: rounded-2xl + 큰 섀도
     MuiDialog: {
+      defaultProps: { disableScrollLock: true },
       styleOverrides: {
         paper: { borderRadius: 16, boxShadow: ui.shadow.lg }
       }
@@ -152,7 +161,7 @@ export const theme = createTheme({
     MuiDialogTitle: { styleOverrides: { root: { fontWeight: 700, color: ui.gray[900] } } },
     // 툴팁: gray-800 + rounded-lg
     MuiTooltip: {
-      defaultProps: { arrow: true, enterDelay: 500 },
+      defaultProps: { arrow: true, enterDelay: 500, disableTouchListener: true }, // 터치: 탭 후 툴팁이 남아 셀렉트를 가림 — 라벨이 버튼에 있으니 생략
       styleOverrides: {
         tooltip: { backgroundColor: ui.gray[800], borderRadius: 8, fontSize: 12.5, fontWeight: 500, padding: '6px 10px' },
         arrow: { color: ui.gray[800] }

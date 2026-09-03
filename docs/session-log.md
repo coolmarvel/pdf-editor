@@ -1,7 +1,7 @@
 ---
 title: 세션 로그
 created: 2026-07-08
-updated: 2026-08-26
+updated: 2026-08-28
 domain: development
 ---
 
@@ -9,6 +9,73 @@ domain: development
 
 이 파일이 **"언제 무슨 일이 있었나"의 SSOT**다. 세션마다 최상단에 블록 추가.
 (2026-07-08부터 git 에 올리지만 커밋/푸시는 사용자가 직접·성긴 단위 — git history 를 이력 SSOT 로 삼지 않는다.)
+
+## 2026-08-28 (2) — v1.7.1: 웹 에디터 동기화(동작 불변 리팩토링·성능) — 12차
+
+**요청**: `~/pdf-editor-live/packages/editor` 12차(엔지니어링 원칙 리팩토링, 커밋 `884c231` 이후) 공용 에디터 변경을 데스크톱에 반영. 기능 변화 없음.
+
+- 패치(29 파일, +642/-611; 신규 `core/search.ts`·`core/editTextSession.ts`·`editor/cursors.ts`·`hooks/usePageRender.ts`·`components/InlineTextEditor.tsx`·`components/ObjectPopovers.tsx`·`store/signsStorage.ts`) 적용. 실패 헝크 3개 수동 반영:
+  `SignDialog.tsx` import(`makeCanvas/toBitmap` 추가 + 데스크톱 전용 `signPngBytes` 유지), `store/editor.ts` 로컬 `loadSavedSigns/persistSavedSigns/rectEq/pruneUntouched` 삭제(데스크톱은 비-export 라 문맥 불일치 → `signsStorage.ts`·`@core/editTextSession` 으로 대체), `store/editor.ts` **lang 기본값 'ko' 유지**(주석만 교정).
+  데스크톱 전용(`window.api`, finishDialog/accountMenu/signStore/downloadSign 없음, `SignDialog.saveSignPng`)은 유지.
+- 내용: PageCanvas 1,058→841(커서·렌더 훅·인라인 편집기·팝업 분리), Toolbar `useSplitGroup` + `pages/currentPage` 구독 제거(20쪽 스크롤 렌더 3,557→1,193), 페이지 범위 셀렉터(객체 선택 시 PageCanvas 커밋 12→1, editText 스팬 추출 12→1), PagesView ResizeObserver 마운트 1회, `canvasUtil.clearImageCache()` 를 `clearDocs()` 에서 호출(문서 닫기·임시본 복원 시 이미지 디코드 캐시 해제), 죽은 재export 2건 삭제, 날짜 박힌 주석 정리.
+- 동기화 후 diff: core/·editor/·hooks/·pdf/·PageCanvas·PagesView·SubToolbar·Toolbar·ThumbCanvas·InlineTextEditor·ObjectPopovers·signsStorage·theme·icons 는 웹과 바이트 동일. 남은 차이는 store(platform signStore·lang)·SignDialog(saveSignPng)·i18n(downloadSign 문구) 뿐.
+
+**검증**: typecheck ✅ · test 25/25 ✅ · build ✅ · visual/pages/search/draft-check 4종 ✅ → `PDF편집기-Setup-1.7.1.exe` 바탕화면.
+
+## 2026-08-28 — v1.7.0: 웹 에디터 동기화(툴바 그룹 스플릿 버튼·디자인 토큰) — 10차
+
+**요청**: `~/pdf-editor-live/packages/editor` 10차(툴바 재그룹 + 토큰화) 공용 에디터 변경을 데스크톱에 반영.
+
+- 패치(11 파일, +227/-57) 적용. 실패 헝크 1개 수동 반영: `TopBar.tsx` 완료 버튼 `borderRadius: 99` 제거(테마 기본 8) — 데스크톱은 accountMenu 슬롯이 없어 문맥 불일치. 로고 아이콘 22px 는 헝크 #1 로 자동 적용.
+  데스크톱 전용(`window.api`, finishDialog/accountMenu 없음, `SignDialog.saveSignPng`)은 유지.
+- **예외**: 패치는 `store/editor.ts` 의 `lang` 기본값을 'en' 으로 바꾸지만 데스크톱은 **'ko' 기본 유지**로 되돌림(`=== 'en' ? 'en' : 'ko'`).
+- 내용: Toolbar 그룹 스플릿 버튼(Text=추가/수정, Marks=X/체크, Annotate=서명/메모/링크; 주 버튼=마지막 하위 도구, ▾ 만 메뉴, 하나의 hover 면, ▾ `data-testid="tool-*-menu"`·aria-label `moreOptions`), 아이콘 20/1.5·라벨 12/500, Manage Pages/Layout 라벨 비잘림, 페이지 드롭 세로 초록 바(ManagePagesDialog·ThumbnailSidebar), TopBar 완료 버튼 radius 8·로고 22, Thumbnail/Search/Loading/Stamp 하드코딩 색 → 테마 토큰. i18n `text/marks/annotate/moreOptions` 키는 패치에 포함.
+- `e2e/visual-check.cjs`: 첫 "텍스트 수정" 진입을 `tool-text-menu` ▾ → 메뉴 항목 클릭으로 변경(이후 주 버튼 라벨이 '텍스트 수정' 이 되어 토글 클릭은 그대로). 검사 삭제 없음.
+
+**검증**: typecheck ✅ · test 25/25 ✅ · build ✅ · visual/pages/search/draft-check 4종 ✅ → `PDF편집기-Setup-1.7.0.exe` 바탕화면.
+
+## 2026-08-27 (4) — v1.6.1: 웹 에디터 동기화(모바일/좁은 창 재수정) — 9차
+
+**요청**: `~/pdf-editor-live/packages/editor` 9차(모바일 재수정) 공용 에디터 변경을 데스크톱에 반영.
+
+- 패치(12 파일, +215/-64) 적용 + 신규 `hooks/useHorizontalScroll.ts`(`useHorizontalWheel`·`H_SCROLL_SX`·`FADE_W`/`fadeSx`) 복사. 실패 헝크 1개 수동 반영:
+  `TopBar.tsx` 완료 버튼 `startIcon` xs 숨김(데스크톱은 accountMenu 슬롯이 없어 문맥 불일치). 데스크톱 전용(`window.api`, finishDialog/accountMenu 없음, `SignDialog.saveSignPng`)은 유지.
+- 내용: Toolbar/SubToolbar/TopBar/ManagePages 세로 휠→가로 스크롤 + 끝 페이드, ManagePages 좁은 폭 대응, Popover/Menu `disableScrollLock`(레이아웃 밀림 방지), 핀치 줌 → 문서 줌(PageCanvas/PagesView touch), StampDialog/SwatchRow/ThumbnailSidebar/FloatingPager/theme 좁은 폭 미세 조정.
+- 웹 전용 차이(platform/signStore)는 가져오지 않음.
+
+**검증**: typecheck ✅ · test 25/25 ✅ · build ✅ · visual/pages/search/draft-check 4종 ✅ → `PDF편집기-Setup-1.6.1.exe` 바탕화면.
+
+## 2026-08-27 (3) — v1.6.0: 웹 에디터 동기화(좁은 창·리팩토링) — 8차
+
+**요청**: `~/pdf-editor-live/packages/editor` 에서 마지막 동기화(v1.5.9) 이후 바뀐 공용 에디터 코드를 데스크톱에 반영.
+
+- 패치(19 파일) 적용 + 신규 `editor/hit.ts`·`erase.ts`·`textGeom.ts` 복사. 실패 헝크 3개 수동 반영:
+  `Editor.tsx`(저장/인쇄 파일명 → `exportFileName()`), `ThumbnailSidebar.tsx`(페이지 추출 → `exportFileName('-pN')`), `TopBar.tsx`(완료 버튼 반응형 padding·nowrap). 데스크톱 전용(`window.api`, finishDialog/accountMenu 없음, `SignDialog.saveSignPng`)은 유지.
+- 내용: 좁은 폭에서 사이드바 오버레이·툴바 가로 스크롤, `PagesView` ResizeObserver 재맞춤 수정, Tooltip `disableTouchListener`, gapbtn 터치 규칙, 텍스트 입력 `onFocus` scrollIntoView, 스토어 `exportFileName`/`DEFAULT_PAGE_SIZE`/`ui.selection`, `fileToDataUrl` → canvasUtil(stamp 재수출), `clearImageCache` 제거, `signPngBytes` 신설(데스크톱 `saveSignPng` 가 채택 — 동작 동일).
+- 웹 전용 차이(platform/signStore/hydrateSavedSigns)는 가져오지 않음.
+
+**검증**: typecheck ✅ · test 25/25 ✅ · build ✅ · visual/pages/search/draft-check 4종 ✅ → `PDF편집기-Setup-1.6.0.exe` 바탕화면.
+
+## 2026-08-27 (2) — v1.5.9: 텍스트 수정 서체 승계, 번들 폰트, 작은 마크 크기, 서명 PNG 저장
+
+**요청**(웹 7차 피드백의 공용 에디터 해당분 + 데스크톱 판단분).
+- `pdf/docs.ts`: 스팬에 `font/bold/italic`(pdf.js `commonObjs` Font 의 name/bold/italic/fallbackName; 미적재 시 `getOperatorList()`). `draw.ts matchFontFamily()` 별칭 표.
+- `PageCanvas`: editText 생성 시 승계. `SubToolbar`: MARK 6/8/10, FONT 6.
+- `fonts.ts` 신설(@fontsource 12종, 400/700+italic). `App.tsx` 에서 import. package.json 에 `@fontsource/*` 추가(본고딕/본명조는 용량 때문에 제외).
+- `SignDialog`: 카드에 PNG 저장 버튼(`saveSignPng` → `window.api.saveBuffer('*.png')`), `main/index.ts` 저장 필터를 확장자로 분기. i18n `downloadSign`.
+
+**검증**: typecheck ✅ · test ✅ · build ✅ · visual/pages/search/draft-check ✅ → `PDF편집기-Setup-1.5.9.exe` 바탕화면. 원천은 `~/pdf-editor-live/packages/editor`(docs/guides/editor-sync.md).
+
+## 2026-08-27 — v1.5.8: 지우개 반경 = 커서 원, 썸네일 객체 오버레이 (웹 6차 피드백의 공용 에디터 해당분)
+
+**요청**(웹 pdf-editor-live 6차): 그리기 지우개가 마우스 커서 원보다 넓게 지운다 / 좌측 썸네일에 서명이 안 보인다.
+
+- `PageCanvas.eraseStrokesAlong`: 판정 반경 `0.012 + width/2` → `ERASE_CURSOR_R_PX(8.5)/cssH + width·aspect/2` (커서 원 반지름 + 선 반폭, 모두 페이지 높이 기준 정규화). 보간 간격 `0.004 → 0.001`.
+  화면에 보이는 빈 틈 ≈ 커서 지름 17px (웹 Playwright 로 10~26px 확인).
+- `ThumbCanvas`: 페이지 캔버스 위에 오버레이 캔버스(`data-testid="thumb-overlay"`) — `objectsByPage[page.id]` 구독, 이미지 프리로드 후 `drawObjects(…,'export')`. 객체 없으면 백킹 스토어 0. pdf.js 재래스터화 없음.
+- `e2e/draft-check.cjs`: 썸네일 캔버스 셀렉터에서 오버레이 제외.
+
+**검증**: typecheck ✅ · test ✅ · build ✅ · visual/pages/search/draft-check 4종 ✅ → `PDF편집기-Setup-1.5.8.exe` 바탕화면. `~/pdf-editor-live/packages/editor` 와 동일 코드(그쪽이 원천).
 
 ## 2026-08-26 (2) — v1.5.7: 페이지 관리 모달 한 줄 툴바·확대, 사이드바 리사이즈 시 페이지 재맞춤, 임시본 직렬화 API
 

@@ -6,8 +6,9 @@ import Paper from '@mui/material/Paper'
 import IconButton from '@mui/material/IconButton'
 import Menu from '@mui/material/Menu'
 import Divider from '@mui/material/Divider'
-import type { PageRef } from '@core/pages'
-import { useEditor } from '@renderer/store/editor'
+import useMediaQuery from '@mui/material/useMediaQuery'
+import { DEFAULT_PAGE_SIZE, type PageRef } from '@core/pages'
+import { useEditor, exportFileName } from '@renderer/store/editor'
 import { useT } from '@renderer/i18n'
 import { ui } from '@renderer/theme'
 import { buildPdf } from '@renderer/pdf/save'
@@ -18,12 +19,12 @@ import ThumbCanvas from './ThumbCanvas'
 import MenuAction from './ui/MenuAction'
 
 const MIN_W = 150
-/** 사이드바 최대 폭: 480px 또는 창 폭의 40% 중 작은 쪽 — 페이지 영역이 너무 좁아져 PDF 가 잘려 보이는 것을 막는다 (2026-08-26 피드백) */
+/** 사이드바 최대 폭: 480px 또는 창 폭의 40% 중 작은 쪽 — 페이지 영역이 너무 좁아져 PDF 가 잘려 보이는 것을 막는다 */
 function maxSidebarW(): number {
   return Math.min(480, Math.floor(window.innerWidth * 0.4))
 }
 
-/** 페이지 사이 실선 + ⊕ (호버 시 진해짐). highlighted = 드롭 삽입점 (보라 선) */
+/** 페이지 사이 실선 + ⊕ (호버 시 진해짐). highlighted = 드롭 삽입점 (초록 바) */
 function Gap({ index, highlighted, onAdd }: { index: number; highlighted: boolean; onAdd: (anchor: HTMLElement, index: number) => void }): JSX.Element {
   return (
     <Box
@@ -36,15 +37,19 @@ function Gap({ index, highlighted, onAdd }: { index: number; highlighted: boolea
         '& .gapline': { position: 'absolute', left: 4, right: 4, top: '50%', height: '1px', bgcolor: 'divider' },
         '& .gapbtn': { opacity: 0, transition: 'opacity .12s', zIndex: 1 },
         '&:hover .gapbtn': { opacity: 1 },
-        ...(highlighted ? { '& .gapline': { position: 'absolute', left: 4, right: 4, top: '50%', height: '3px', bgcolor: 'secondary.main', borderRadius: 2 } } : {})
+        // hover 가 없는 기기에선 항상 보이고, 터치(pointer: coarse)에선 40px 타깃 (마우스 밀도는 그대로)
+        '@media (hover: none)': { '& .gapbtn': { opacity: 1 } },
+        '@media (pointer: coarse)': { '& .gapbtn': { width: 40, height: 40 } },
+        // 드롭 삽입점: gap 한가운데 2px 초록 바 (Manage Pages 그리드의 세로 바와 같은 스타일)
+        ...(highlighted ? { '& .gapline': { position: 'absolute', left: 0, right: 0, top: 'calc(50% - 1px)', height: '2px', bgcolor: 'primary.main', borderRadius: 1 }, '& .gapbtn': { opacity: 0 } } : {})
       }}
     >
-      <Box className="gapline" />
+      <Box className="gapline" data-drop-indicator={highlighted ? 'between' : undefined} />
       <IconButton
         className="gapbtn"
         size="small"
         onClick={(e) => onAdd(e.currentTarget, index)}
-        sx={{ width: 18, height: 18, bgcolor: '#fff', border: '1px solid #d7dae0', '&:hover': { bgcolor: '#f1f2f4' } }}
+        sx={{ width: 18, height: 18, bgcolor: '#fff', border: `1px solid ${ui.gray[300]}`, '&:hover': { bgcolor: ui.gray[100] } }}
       >
         <Plus sx={{ fontSize: 13 }} />
       </IconButton>
@@ -100,7 +105,7 @@ const ThumbRow = memo(function ThumbRow({ page, index, active, pageW, pageH, thu
             e.stopPropagation()
             onMenu(e.currentTarget, index)
           }}
-          sx={{ position: 'absolute', top: 6, right: 6, width: 24, height: 24, bgcolor: 'rgba(255,255,255,.95)', border: '1px solid #d7dae0', boxShadow: 1, '&:hover': { bgcolor: '#fff' } }}
+          sx={{ position: 'absolute', top: 6, right: 6, width: 24, height: 24, bgcolor: 'rgba(255,255,255,.95)', border: `1px solid ${ui.gray[300]}`, boxShadow: ui.shadow.xs, '&:hover': { bgcolor: '#fff' } }}
         >
           <EllipsisVertical sx={{ fontSize: 16 }} />
         </IconButton>
@@ -118,8 +123,10 @@ const ThumbRow = memo(function ThumbRow({ page, index, active, pageW, pageH, thu
  * 폭 조절 핸들 · 호버 시 ⋮ 메뉴(이동/회전/복제/추출/삭제) · 드래그로 순서 변경(보라 삽입선) ·
  * 페이지 사이 실선+⊕(페이지 추가/PDF 업로드)
  */
-export default function ThumbnailSidebar({ onManagePages }: { onManagePages: () => void }): JSX.Element {
+export default function ThumbnailSidebar({ onManagePages, onClose }: { onManagePages: () => void; onClose?: () => void }): JSX.Element {
   const t = useT()
+  // 폰 폭(< 600px)에서는 문서 위에 겹치는 오버레이 — 폭 조절 없음, 바깥 클릭/썸네일 클릭이면 닫힌다
+  const overlay = useMediaQuery('(max-width: 599.95px)')
   const pages = useEditor((s) => s.pages)
   const displaySizes = useEditor((s) => s.displaySizes)
   const currentPage = useEditor((s) => s.currentPage)
@@ -148,7 +155,10 @@ export default function ThumbnailSidebar({ onManagePages }: { onManagePages: () 
     axis: 'y',
     threshold: 6,
     onDrop: (index, drop) => pageMoveToIndex(new Set([pages[index].id]), drop),
-    onClick: requestScrollTo // 클릭 = 해당 페이지로 이동
+    onClick: (index) => {
+      requestScrollTo(index) // 클릭 = 해당 페이지로 이동
+      if (overlay) onClose?.()
+    }
   })
   const onMenu = useCallback((anchor: HTMLElement, index: number) => setPageMenu({ anchor, index }), [])
   const onAdd = useCallback((anchor: HTMLElement, index: number) => setAddMenu({ anchor, index }), [])
@@ -176,7 +186,7 @@ export default function ThumbnailSidebar({ onManagePages }: { onManagePages: () 
     const { objectsByPage } = useEditor.getState()
     const p = pages[index]
     const bytes = await buildPdf({ pages: [p], objectsByPage: { [p.id]: objectsByPage[p.id] ?? [] }, displaySizes })
-    await window.api.saveBuffer(`${useEditor.getState().fileName || 'document'}-p${index + 1}.pdf`, bytes)
+    await window.api.saveBuffer(exportFileName(`-p${index + 1}`), bytes)
   }
 
   /** ⋮ 메뉴 항목 실행 후 닫기 */
@@ -194,15 +204,25 @@ export default function ThumbnailSidebar({ onManagePages }: { onManagePages: () 
   // 64px 단위로 올림 — 폭 핸들을 끄는 동안 픽셀마다 전 썸네일이 재래스터화되지 않게
   const thumbW = Math.ceil((width * Math.min(window.devicePixelRatio || 1, 2)) / 64) * 64
 
+  const sidebarW = overlay ? 'min(260px, 80vw)' : width
   return (
-    <Box data-sidebar sx={{ position: 'relative', width, flexShrink: 0, borderRight: 1, borderColor: 'divider', bgcolor: ui.surface.sidebar, display: 'flex', flexDirection: 'column' }}>
+    <>
+    {overlay && <Box data-sidebar-backdrop onClick={onClose} sx={{ position: 'absolute', inset: 0, zIndex: 14, bgcolor: 'rgba(16,24,40,.25)' }} />}
+    <Box
+      data-sidebar
+      sx={{
+        position: overlay ? 'absolute' : 'relative',
+        ...(overlay ? { left: 0, top: 0, bottom: 0, zIndex: 15, boxShadow: 6 } : {}),
+        width: sidebarW, flexShrink: 0, borderRight: 1, borderColor: 'divider', bgcolor: ui.surface.sidebar, display: 'flex', flexDirection: 'column'
+      }}
+    >
       <Box ref={listRef} sx={{ flex: 1, overflowY: 'auto', p: 1.5, pt: 1.5 }}>
         <Button fullWidth size="small" variant="outlined" color="inherit" startIcon={<LayoutGrid />} onClick={onManagePages} sx={{ mb: 0.5 }}>
           {t('managePages')}
         </Button>
         <Gap index={0} highlighted={dropIdx === 0 && dragIdx !== null} onAdd={onAdd} />
         {pages.map((p, i) => {
-          const size = displaySizes[p.id] ?? { w: 595, h: 842 }
+          const size = displaySizes[p.id] ?? DEFAULT_PAGE_SIZE
           return (
             <ThumbRow
               key={p.id}
@@ -222,8 +242,8 @@ export default function ThumbnailSidebar({ onManagePages }: { onManagePages: () 
         })}
       </Box>
 
-      {/* 폭 조절 핸들 */}
-      <Box
+      {/* 폭 조절 핸들 (오버레이 모드에선 없음) */}
+      {!overlay && <Box
         onPointerDown={startResize}
         sx={{
           position: 'absolute',
@@ -235,7 +255,7 @@ export default function ThumbnailSidebar({ onManagePages }: { onManagePages: () 
           zIndex: 5,
           '&:hover': { bgcolor: 'rgba(21,128,61,.18)' }
         }}
-      />
+      />}
 
       {/* ⋮ 페이지 메뉴 */}
       <Menu anchorEl={pageMenu?.anchor ?? null} open={!!pageMenu} onClose={() => setPageMenu(null)}>
@@ -258,5 +278,6 @@ export default function ThumbnailSidebar({ onManagePages }: { onManagePages: () 
 
       {inputs}
     </Box>
+    </>
   )
 }

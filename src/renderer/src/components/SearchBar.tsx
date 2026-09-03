@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { ui } from '@renderer/theme'
 import Box from '@mui/material/Box'
 import IconButton from '@mui/material/IconButton'
 import InputBase from '@mui/material/InputBase'
@@ -56,7 +57,10 @@ export default function SearchBar(): JSX.Element | null {
       sx={{
         position: 'absolute',
         top: 12,
-        right: 24,
+        // 폰 폭(xs)에서는 좌우 8px 을 두고 가로를 꽉 채운다 — 우측 고정 폭이면 입력이 화면 왼쪽 밖으로 나간다
+        right: { xs: 8, sm: 24 },
+        left: { xs: 8, sm: 'auto' },
+        maxWidth: 'calc(100% - 16px)',
         zIndex: 30,
         display: 'flex',
         alignItems: 'center',
@@ -64,10 +68,9 @@ export default function SearchBar(): JSX.Element | null {
         px: 1,
         py: 0.4,
         bgcolor: '#fff',
-        border: 1,
-        borderColor: 'divider',
-        borderRadius: 2,
-        boxShadow: 3
+        borderRadius: 1.5,
+        border: `1px solid ${ui.gray[200]}`,
+        boxShadow: ui.shadow.lg // floating 층 규격(DESIGN.md)
       }}
     >
       <InputBase
@@ -87,7 +90,7 @@ export default function SearchBar(): JSX.Element | null {
             else searchNext()
           }
         }}
-        sx={{ width: 200, fontSize: 14, px: 0.5 }}
+        sx={{ width: { xs: 'auto', sm: 200 }, flex: { xs: 1, sm: 'none' }, minWidth: 0, fontSize: 14, px: 0.5 }}
       />
       <Typography
         data-testid="search-counter"
