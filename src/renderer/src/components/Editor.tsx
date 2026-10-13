@@ -13,7 +13,7 @@ import Toolbar from './Toolbar'
 import SubToolbar from './SubToolbar'
 import ThumbnailSidebar from './ThumbnailSidebar'
 import PagesView from './PagesView'
-import FloatingPager from './FloatingPager'
+import EditorStatusBar from './EditorStatusBar'
 import SearchBar from './SearchBar'
 import ManagePagesDialog from './ManagePagesDialog'
 import StampDialog from './StampDialog'
@@ -118,19 +118,21 @@ export default function Editor(): JSX.Element {
   // 낮은 화면(높이 < 480, 폰 가로 회전): 헤더+툴바+서브툴바가 세로의 절반을 먹어 문서가 130px 남짓 보였다 → 서브툴바를
   // 문서 위 오버레이(도구/선택 시에만)로. 폭 브레이크포인트가 아닌 높이 조건
   const shortScreen = useMediaQuery('(max-height: 479.95px)')
+  // 툴바와 메뉴 바가 같은 콜백을 쓴다
+  const toolbarProps = {
+    sidebarOpen,
+    onToggleSidebar: () => setSidebarOpen(!sidebarOpen),
+    onManagePages: () => setManagePagesOpen(true),
+    onOpenImage: () => imageInputRef.current?.click(),
+    onOpenStamp: () => setStampOpen(true),
+    onOpenSign: () => setSignOpen(true)
+  }
 
   // touchAction pan-x pan-y: 에디터 안에서 시작한 두 손가락 핀치가 브라우저 전체 확대(헤더·툴바까지)로 가지 않는다 — 문서 줌은 PagesView 가 처리
   return (
-    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', touchAction: 'pan-x pan-y' }}>
-      <TopBar busy={busy} onPrint={() => void onPrint()} onDownload={() => void onDownload()} onDone={() => setDoneOpen(true)} />
-      <Toolbar
-        sidebarOpen={sidebarOpen}
-        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
-        onManagePages={() => setManagePagesOpen(true)}
-        onOpenImage={() => imageInputRef.current?.click()}
-        onOpenStamp={() => setStampOpen(true)}
-        onOpenSign={() => setSignOpen(true)}
-      />
+    <Box className="classic-app" sx={{ height: '100vh', display: 'flex', flexDirection: 'column', touchAction: 'pan-x pan-y', bgcolor: 'background.default' }}>
+      <TopBar busy={busy} onPrint={() => void onPrint()} onDownload={() => void onDownload()} onDone={() => setDoneOpen(true)} toolbar={toolbarProps} />
+      <Toolbar {...toolbarProps} />
       {!shortScreen && <SubToolbar />}
 
       <Box sx={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative' }}>
@@ -138,8 +140,8 @@ export default function Editor(): JSX.Element {
         <PagesView />
         {shortScreen && <SubToolbar overlay />}
         <SearchBar />
-        <FloatingPager />
       </Box>
+      <EditorStatusBar />
 
       <input ref={imageInputRef} type="file" hidden accept="image/*" onChange={(e) => void onImagePicked(e)} />
 

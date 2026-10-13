@@ -70,7 +70,7 @@ export default function StampDialog({ open, onClose }: { open: boolean; onClose:
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm" fullScreen={narrow}>
       <Box sx={{ p: narrow ? 2 : 2.5, display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-          <Typography fontWeight={800}>{custom ? t('customStamp') : t('presetStamp')}</Typography>
+          <Typography fontWeight={700}>{custom ? t('customStamp') : t('presetStamp')}</Typography>
           <Button size="small" variant="outlined" color="secondary" onClick={() => setCustom(!custom)}>
             {custom ? t('presetStamp') : t('customStamp')}
           </Button>
@@ -92,7 +92,7 @@ export default function StampDialog({ open, onClose }: { open: boolean; onClose:
         ) : (
           <Stack spacing={2}>
             <Paper variant="outlined" sx={{ p: 3, display: 'flex', justifyContent: 'center' }}>
-              <Box sx={{ border: `3px solid ${c.color}`, bgcolor: c.bg, color: c.color, px: 3, py: 1, borderRadius: 1.5, fontWeight: 800, fontStyle: 'italic', fontSize: 22, textAlign: 'center' }}>
+              <Box sx={{ border: `3px solid ${c.color}`, bgcolor: c.bg, color: c.color, px: 3, py: 1, borderRadius: 0, fontWeight: 700, fontStyle: 'italic', fontSize: 22, textAlign: 'center' }}>
                 {customSpec.text}
                 {(withDate || withTime) && (
                   <Typography sx={{ fontSize: 12, fontWeight: 700 }}>{[customSpec.date, customSpec.time].filter(Boolean).join(' ')}</Typography>
@@ -110,7 +110,7 @@ export default function StampDialog({ open, onClose }: { open: boolean; onClose:
               onChange={(col) => setColorIdx(STAMP_COLORS.indexOf(col))}
               spacing={1}
               prefix={<Typography variant="body2">{t('color')}</Typography>}
-              swatchSx={(_, sel) => ({ cursor: 'pointer', boxShadow: sel ? `0 0 0 2px #fff, 0 0 0 4px ${ui.brand[500]}` : '0 0 0 1px rgba(0,0,0,.12)' })} /* 서명 다이얼로그와 같은 선택 링 */
+              swatchSx={(_, sel) => ({ cursor: 'pointer', outline: sel ? `2px solid ${ui.classic.color.accent}` : `1px solid ${ui.classic.color.borderStrong}`, outlineOffset: 1 })} /* 서명 다이얼로그와 같은 선택 링 */
             />
             <Stack direction="row" spacing={1} justifyContent="flex-end">
               <Button color="inherit" onClick={onClose}>

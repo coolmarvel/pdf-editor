@@ -1,7 +1,7 @@
 ---
 title: 세션 로그
 created: 2026-07-08
-updated: 2026-08-28
+updated: 2026-10-12
 domain: development
 ---
 
@@ -9,6 +9,21 @@ domain: development
 
 이 파일이 **"언제 무슨 일이 있었나"의 SSOT**다. 세션마다 최상단에 블록 추가.
 (2026-07-08부터 git 에 올리지만 커밋/푸시는 사용자가 직접·성긴 단위 — git history 를 이력 SSOT 로 삼지 않는다.)
+
+## 2026-10-13 — 저장 크기 버그 수정(임베드 묶음 + copyPages) · 대화상자 여백 미러
+
+- pdf-editor-live 피드백(59쪽 1.4MB 책 → 64MB): `pdf/save.ts` 가 페이지마다 `embedPage` 를 따로 불러 pdf-lib 복사기가 호출마다 새로 만들어지고 공유 서체가 페이지 수만큼 복사됐다. 손대지 않은 페이지는 문서별 `copyPages`, 나머지는 문서별 `embedPages` 한 번으로. 복제 페이지는 둘째부터 임베드.
+- `theme.ts` `MuiDialogContent` 12px 대칭 + safe center(본문이 제목 띠에 붙던 것), `classic/tokens.ts` `touch: 40` (웹과 동일 값).
+- 앱 아이콘 교체: `build/icon.png`(512)·`build/icon.ico`(16/32/48/256) 를 웹과 같은 클래식 파랑 마크(`pdf-editor-live/apps/web/public/icon.svg`)로 재생성, NSIS `installerHeader.bmp`(150×57)·`installerSidebar.bmp`·`uninstallerSidebar.bmp`(164×314)도 같은 마크 + 클래식 회색 배경 + 나눔고딕 문구로 다시 만들었다(생성은 sharp + PIL, 원본 SVG 가 SSOT). 바이너리·설치 프로그램·제거 프로그램 아이콘은 electron-builder 설정이 `build/icon.ico` 를 쓰므로 자동 반영.
+- typecheck · `npm test` 25/25. 미커밋.
+
+## 2026-10-12 — v1.7.2: 클래식 UI 포팅(pdf-editor-live ADR-0004 와 동일 토큰)
+
+**요청**: 웹(`~/pdf-editor-live`) 이 2026-10-12 자매 프로젝트(sh-compositor·sh-web-editor·sh-econsent) 의 **클래식** 디자인 체계로 바뀌었다(ADR-0004). 데스크톱도 같은 모양으로.
+
+- **토큰 공유**: `src/renderer/src/classic/{tokens.ts,skins.ts,base.css}` = 웹 `packages/editor/src/renderer/classic/*` 와 값 동일(공유 SSOT, 수동 동기화 — 세미콜론 없는 스타일만 다름). `theme.ts` 를 웹의 클래식 MUI 테마로 교체(반경 0 · 1px 테두리 · 12px 맑은 고딕 · 24px 컨트롤 · 베벨 버튼 · 점선 포커스 · 전환 0ms). 옛 토큰 이름(`ui.gray[...]`·`ui.brand`·`ui.surface`…)은 호환 뷰로 유지해 104곳 호출부 그대로. `main.tsx` 가 `base.css` 를 올리고 `applyTokens()` 로 CSS 변수를 심는다.
+- **크롬**: `TopBar.tsx` = 타이틀 띠 28(앱명 = 메인으로 나가기 확인 모달 `brand-exit`·파일명·검색·인쇄·저장·완료) + 메뉴 바 22(`components/classic/MenuBar.tsx` — 파일·편집·보기(페이지 패널·보기 모드·확대/축소·**스킨 13종**)·페이지·도구·도움말, Alt 로 열기, 호버 전환). 웹과 달리 복사/붙여넣기/복제·엔진 메뉴는 없음(데스크톱 스토어·wasm 엔진 없음). `Toolbar.tsx` = 30px 띠 + 24px 평면 버튼(16px 아이콘 + 12px 라벨 가로, 스플릿 ▾ 12px, 음각 구분선) — 좁은 폭 페이드 제거. `SubToolbar.tsx` = 30px 옵션 바(`surface.toolbar2`), 컨트롤 24px, 견본 정사각형, 베벨 트리거. `ThumbnailSidebar.tsx` = 제목 띠 "페이지"(`classic/PanelTitle.tsx`) + 베벨 버튼 + 정사각 썸네일(활성 2px 파랑). `PageCanvas.tsx` 종이 = 1px 테두리 + 2px 오프셋 그림자, 스테이지 `#8a8f98`. **플로팅 페이저 삭제 → `EditorStatusBar.tsx`**(22px 상태 줄: 준비 · 페이지 ▲n/m▼ · 배율 + % − 손 · 객체 수 · 제작, `floating-pager` 손잡이 유지). `Editor.tsx` 루트 `classic-app`. `SearchBar`·`LoadingScreen`·`Landing`(타이틀 띠 + "PDF 파일 선택" 패널 + 점선 드롭 영역 + 기능 목록)·대화상자(반경·그림자·굵기 800 제거, 16px 아이콘, 정사각 견본, `DialogBars` 제목 띠/상태 띠)·`icons.tsx` stroke 1.75. i18n 에 메뉴·상태 줄 키 31개(웹 `menu.ts` 와 같은 키) + `exit*` 4키.
+- **검증**: typecheck ✅ · test 25/25 ✅ · build ✅ · Electron+Xvfb 스크린샷 `e2e/.classic/{01-landing,02-editor,03-text-tool,04-menu-view,05-manage-pages}.png` 육안 확인(웹 8080 과 같은 모양). 인스톨러는 굽지 않음(사용자 지시 없음 — 포팅 세션).
 
 ## 2026-08-28 (2) — v1.7.1: 웹 에디터 동기화(동작 불변 리팩토링·성능) — 12차
 

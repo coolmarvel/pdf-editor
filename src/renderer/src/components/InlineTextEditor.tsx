@@ -76,7 +76,7 @@ export default function InlineTextEditor({ obj, value, cssW, cssH, caret, onChan
         lineHeight: TEXT_LINE_HEIGHT,
         // "입력 팝업" 느낌 제거: 얇은 테두리만, 그림자 없음, 배경은 제자리 그대로 (editText 는 원본 글자를 덮어야 하므로 흰 배경)
         border: `${bw}px solid #7aabf0`,
-        borderRadius: 2,
+        borderRadius: 0,
         outline: 'none',
         background: isText ? (obj.bgColor ?? 'transparent') : '#fff',
         resize: 'none',

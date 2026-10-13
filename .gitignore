@@ -16,3 +16,6 @@ pdf-guru-screenshots/*.png
 
 # TailAdmin 디자인 레퍼런스 (커밋 금지)
 tailadmin-nextjs-pro-225/
+
+# 클래식 UI 포팅 확인 스크린샷(2026-10-12, 추적 안 함)
+e2e/.classic/

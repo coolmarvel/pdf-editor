@@ -30,7 +30,7 @@ export default function SwatchRow({ colors, value, onChange, size = 24, coarseSi
       {prefix}
       {colors.map((c) => {
         const sel = cur === c.toLowerCase()
-        const s = [{ width: size, height: size, borderRadius: '50%', bgcolor: c, ...(coarseSize ? { '@media (pointer: coarse)': { width: coarseSize, height: coarseSize } } : {}) }, swatchSx(c, sel)] as SxProps<Theme>
+        const s = [{ width: size, height: size, borderRadius: 0, bgcolor: c, ...(coarseSize ? { '@media (pointer: coarse)': { width: coarseSize, height: coarseSize } } : {}) }, swatchSx(c, sel)] as SxProps<Theme>
         return ripple ? <ButtonBase key={c} onClick={() => onChange(c)} sx={s} /> : <Box key={c} onClick={() => onChange(c)} sx={s} />
       })}
     </Stack>

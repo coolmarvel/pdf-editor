@@ -732,7 +732,7 @@ function PageCanvas({ page, zoom }: Props): JSX.Element {
     <Box
       ref={boxRef}
       data-page-index
-      sx={{ position: 'relative', width: cssW, height: cssH, bgcolor: '#fff', boxShadow: 2, flexShrink: 0 }}
+      sx={{ position: 'relative', width: cssW, height: cssH, bgcolor: '#fff', boxShadow: ui.classic.shadow.page, outline: `1px solid ${ui.classic.color.borderStrong}`, flexShrink: 0 }}
     >
       <canvas ref={baseRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
       <canvas ref={overlayRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />

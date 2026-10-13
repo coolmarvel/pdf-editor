@@ -184,11 +184,11 @@ export default function SignDialog({ open, onClose }: { open: boolean; onClose: 
           sx: {
             width: narrow ? '100%' : 'min(720px, calc(100vw - 64px))',
             maxHeight: narrow ? '100%' : 'calc(100vh - 96px)',
-            borderRadius: narrow ? 0 : 2,
+            borderRadius: 0,
             bgcolor: '#fff',
             color: ui.gray[900],
             overflow: 'hidden',
-            boxShadow: ui.shadow.lg
+            boxShadow: ui.classic.shadow.dialog
           }
         }
       }}
@@ -214,7 +214,7 @@ export default function SignDialog({ open, onClose }: { open: boolean; onClose: 
                   sx={{
                     position: 'relative',
                     height: 120,
-                    borderRadius: 1.5,
+                    borderRadius: 0,
                     borderColor: ui.gray[300],
                     bgcolor: '#fff',
                     cursor: 'pointer',
@@ -300,13 +300,13 @@ export default function SignDialog({ open, onClose }: { open: boolean; onClose: 
                 size={coarse ? 32 : 22}
                 spacing={coarse ? 1.5 : 2}
                 sx={{ justifyContent: 'flex-end', mb: 1, pr: 0.5 }}
-                swatchSx={(_, sel) => ({ cursor: 'pointer', boxShadow: sel ? `0 0 0 2px #fff, 0 0 0 4px ${ACTIVE}` : '0 0 0 1px rgba(0,0,0,.12)' })}
+                swatchSx={(_, sel) => ({ cursor: 'pointer', outline: sel ? `2px solid ${ACTIVE}` : `1px solid ${ui.classic.color.borderStrong}`, outlineOffset: 1 })}
               />
             )}
 
             {tab === 0 && (
               <Stack spacing={1.5} alignItems="center">
-                <Box ref={canvasBoxRef} sx={{ width: '100%', border: `1.5px dashed ${ui.gray[300]}`, borderRadius: 1.5, bgcolor: CANVAS_BG, position: 'relative', mt: 1 }}>
+                <Box ref={canvasBoxRef} sx={{ width: '100%', border: `1.5px dashed ${ui.gray[300]}`, borderRadius: 0, bgcolor: CANVAS_BG, position: 'relative', mt: 1 }}>
                   <canvas
                     ref={canvasRef}
                     width={canvasPx?.w ?? 1040}
@@ -363,7 +363,7 @@ export default function SignDialog({ open, onClose }: { open: boolean; onClose: 
                     width: '100%',
                     minHeight: 240,
                     border: `1.5px dashed ${ui.gray[300]}`,
-                    borderRadius: 1.5,
+                    borderRadius: 0,
                     mt: 1,
                     display: 'flex',
                     alignItems: 'center',
@@ -405,7 +405,7 @@ export default function SignDialog({ open, onClose }: { open: boolean; onClose: 
 
             {tab === 2 && (
               <Stack spacing={1.5} alignItems="center">
-                <Box sx={{ width: '100%', bgcolor: '#fff', border: `1.5px dashed ${ui.gray[300]}`, borderRadius: 1.5, mt: 1, px: 2, py: 1.5 }}>
+                <Box sx={{ width: '100%', bgcolor: '#fff', border: `1.5px dashed ${ui.gray[300]}`, borderRadius: 0, mt: 1, px: 2, py: 1.5 }}>
                   <Box
                     component="input"
                     autoFocus
@@ -441,7 +441,7 @@ export default function SignDialog({ open, onClose }: { open: boolean; onClose: 
                       sx={{
                         minHeight: 60,
                         border: `1px solid ${fontIdx === i ? ACTIVE : ui.gray[300]}`,
-                        borderRadius: 1.5,
+                        borderRadius: 0,
                         bgcolor: '#fff',
                         color: ui.gray[800],
                         cursor: 'pointer',
@@ -523,14 +523,14 @@ const cardIconSx = {
   bgcolor: '#fff',
   color: ui.gray[500],
   border: `1px solid ${ui.gray[300]}`,
-  borderRadius: 1,
+  borderRadius: 0,
   '&:hover': { bgcolor: ui.brand[50], color: ui.brand[600], borderColor: ui.brand[500] }
 }
 
 const primaryButtonSx = {
   bgcolor: ui.brand[500],
   color: '#fff',
-  borderRadius: 1.5,
+  borderRadius: 0,
   px: 2.5,
   py: 0.9,
   fontWeight: 700,
@@ -544,7 +544,7 @@ const secondaryButtonSx = {
   border: `1px solid ${ui.gray[300]}`,
   bgcolor: '#fff',
   color: ui.gray[700],
-  borderRadius: 1.5,
+  borderRadius: 0,
   px: 2.2,
   py: 0.8,
   fontWeight: 700,

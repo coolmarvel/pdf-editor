@@ -16,6 +16,7 @@ import { usePageImport } from '@renderer/hooks/usePageImport'
 import { useDragReorder, type DragReorderBind } from '@renderer/hooks/useDragReorder'
 import { ArrowDown, ArrowUp, Copy, Download, EllipsisVertical, FilePlus, FileUp, IconImage, LayoutGrid, Plus, RotateCcw, RotateCw, Trash2 } from './icons'
 import ThumbCanvas from './ThumbCanvas'
+import PanelTitle from './classic/PanelTitle'
 import MenuAction from './ui/MenuAction'
 
 const MIN_W = 150
@@ -93,7 +94,7 @@ const ThumbRow = memo(function ThumbRow({ page, index, active, pageW, pageH, thu
           '&:hover .thumbmenu': { opacity: 1 }
         }}
       >
-        <Paper variant="outlined" sx={{ overflow: 'hidden', borderColor: active ? 'secondary.main' : 'divider', borderWidth: active ? 2 : 1, borderRadius: 1.5 }}>
+        <Paper variant="outlined" sx={{ overflow: 'hidden', borderColor: active ? 'primary.main' : ui.classic.color.borderStrong, borderWidth: active ? 2 : 1, borderRadius: 0 }}>
           <ThumbCanvas page={page} width={thumbW} pageW={pageW} pageH={pageH} />
         </Paper>
         {/* 호버 ⋮ 메뉴 버튼 (우측 상단) */}
@@ -105,11 +106,11 @@ const ThumbRow = memo(function ThumbRow({ page, index, active, pageW, pageH, thu
             e.stopPropagation()
             onMenu(e.currentTarget, index)
           }}
-          sx={{ position: 'absolute', top: 6, right: 6, width: 24, height: 24, bgcolor: 'rgba(255,255,255,.95)', border: `1px solid ${ui.gray[300]}`, boxShadow: ui.shadow.xs, '&:hover': { bgcolor: '#fff' } }}
+          sx={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, background: ui.classic.surface.bevel, border: `1px solid ${ui.classic.color.buttonBorder}`, '&:hover': { bgcolor: '#fff', borderColor: ui.classic.color.hoverEdge } }}
         >
           <EllipsisVertical sx={{ fontSize: 16 }} />
         </IconButton>
-        <Typography variant="caption" display="block" textAlign="center" color={active ? 'secondary.main' : 'text.secondary'} fontWeight={active ? 700 : 400}>
+        <Typography variant="caption" display="block" textAlign="center" className="tnum" color={active ? 'primary.main' : 'text.secondary'} fontWeight={active ? 700 : 400}>
           {index + 1}
         </Typography>
       </Box>
@@ -213,11 +214,12 @@ export default function ThumbnailSidebar({ onManagePages, onClose }: { onManageP
       sx={{
         position: overlay ? 'absolute' : 'relative',
         ...(overlay ? { left: 0, top: 0, bottom: 0, zIndex: 15, boxShadow: 6 } : {}),
-        width: sidebarW, flexShrink: 0, borderRight: 1, borderColor: 'divider', bgcolor: ui.surface.sidebar, display: 'flex', flexDirection: 'column'
+        width: sidebarW, flexShrink: 0, borderRight: `1px solid ${ui.classic.chrome.frame}`, bgcolor: ui.surface.sidebar, display: 'flex', flexDirection: 'column'
       }}
     >
-      <Box ref={listRef} sx={{ flex: 1, overflowY: 'auto', p: 1.5, pt: 1.5 }}>
-        <Button fullWidth size="small" variant="outlined" color="inherit" startIcon={<LayoutGrid />} onClick={onManagePages} sx={{ mb: 0.5 }}>
+      <PanelTitle testId="pages-panel-title">{t('pages')}</PanelTitle>
+      <Box ref={listRef} sx={{ flex: 1, overflowY: 'auto', p: `${ui.classic.space.base}px` }}>
+        <Button fullWidth size="small" variant="outlined" color="inherit" startIcon={<LayoutGrid />} onClick={onManagePages} sx={{ mb: `${ui.classic.space.sm}px` }}>
           {t('managePages')}
         </Button>
         <Gap index={0} highlighted={dropIdx === 0 && dragIdx !== null} onAdd={onAdd} />
@@ -253,7 +255,7 @@ export default function ThumbnailSidebar({ onManagePages, onClose }: { onManageP
           height: '100%',
           cursor: 'col-resize',
           zIndex: 5,
-          '&:hover': { bgcolor: 'rgba(21,128,61,.18)' }
+          '&:hover': { bgcolor: 'rgba(59,116,242,.18)' }
         }}
       />}
 

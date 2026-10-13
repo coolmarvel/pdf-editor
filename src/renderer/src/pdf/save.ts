@@ -2,208 +2,302 @@
  * 저장 파이프라인 (pdf-lib).
  *
  * 전략: 새 문서를 만들고 각 페이지를 **표시 방향 그대로 평탄화**해서 embedPage로 얹는다.
+ * - 임베드는 원본 문서 단위로 한 번에(`embedPages`), 손대지 않은 페이지는 `copyPages` — pdf-lib 는 호출마다 객체 복사기를 새로 만들어
+ *   페이지마다 따로 부르면 공유 서체·이미지가 페이지 수만큼 복사된다(59쪽 1.4MB → 64MB, 2026-10-13 pdf-editor-live 피드백).
  * - 페이지 삭제/복제/순서/회전/빈페이지/가져오기가 전부 자연스럽게 처리된다.
  * - 오버레이(그리기·텍스트·도형·이미지)는 표시 공간에서 투명 PNG로 렌더해 페이지 전체에 얹는다.
  *   (원본 PDF 내용은 벡터 유지, 얹은 것만 비트맵)
  * - 링크/노트는 눈에 그리지 않고 실제 PDF 주석(Link/Text Annot)으로 넣는다.
  */
-import { PDFDocument, PDFName, PDFString, PDFHexString, PDFArray, degrees } from 'pdf-lib'
-import type { PDFPage, PDFObject } from 'pdf-lib'
-import type { PageRef } from '@core/pages'
-import type { PageObject, LinkObj, NoteObj } from '@core/objects'
-import { getDocBytes, renderPage } from './docs'
-import { drawObjects, effectiveBlend } from '@renderer/editor/draw'
-import { makeCanvas, releaseCanvas, canvasBytes, imageUrlsOf, preloadImage } from '@renderer/editor/canvasUtil'
+import {
+  PDFDocument,
+  PDFName,
+  PDFString,
+  PDFHexString,
+  PDFArray,
+  degrees,
+} from "pdf-lib";
+import type { PDFPage, PDFObject } from "pdf-lib";
+import type { PageRef } from "@core/pages";
+import type { PageObject, LinkObj, NoteObj } from "@core/objects";
+import { getDocBytes, renderPage } from "./docs";
+import { drawObjects, effectiveBlend } from "@renderer/editor/draw";
+import {
+  makeCanvas,
+  releaseCanvas,
+  canvasBytes,
+  imageUrlsOf,
+  preloadImage,
+} from "@renderer/editor/canvasUtil";
 
 /** 오버레이 굽기 해상도 (pt → px 배율). 2.5 ≈ 180dpi */
-const BURN_SCALE = 2.5
+const BURN_SCALE = 2.5;
 
 interface SaveInput {
-  pages: PageRef[]
-  objectsByPage: Record<string, PageObject[]>
+  pages: PageRef[];
+  objectsByPage: Record<string, PageObject[]>;
   /** 표시 크기(pt) — 스토어가 이미 알고 있는 값 (blank 포함) */
-  displaySizes: Record<string, { w: number; h: number }>
+  displaySizes: Record<string, { w: number; h: number }>;
 }
 
 function hexToRgb(hex: string): [number, number, number] {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex)
-  if (!m) return [1, 0.9, 0.3]
-  const n = parseInt(m[1], 16)
-  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255]
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return [1, 0.9, 0.3];
+  const n = parseInt(m[1], 16);
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
 }
 
 /** 오버레이 PNG 바이트 (그릴 객체가 없으면 null). 임시 캔버스는 뽑는 즉시 비운다 — 저장 중 페이지 수만큼 쌓이지 않게 */
-async function burnOverlayPng(objects: PageObject[], dw: number, dh: number, ref: PageRef): Promise<Uint8Array | null> {
-  const drawable = objects.filter((o) => o.type !== 'link' && o.type !== 'note')
-  if (drawable.length === 0) return null
+async function burnOverlayPng(
+  objects: PageObject[],
+  dw: number,
+  dh: number,
+  ref: PageRef,
+): Promise<Uint8Array | null> {
+  const drawable = objects.filter(
+    (o) => o.type !== "link" && o.type !== "note",
+  );
+  if (drawable.length === 0) return null;
   // 이미지 객체 사전 로드
-  await Promise.all(imageUrlsOf(drawable).map(preloadImage))
-  const scale = Math.min(BURN_SCALE, 4000 / Math.max(dw, dh))
-  const W = Math.round(dw * scale)
-  const H = Math.round(dh * scale)
-  const { canvas, ctx } = makeCanvas(W, H)
-  const temps: HTMLCanvasElement[] = [canvas]
+  await Promise.all(imageUrlsOf(drawable).map(preloadImage));
+  const scale = Math.min(BURN_SCALE, 4000 / Math.max(dw, dh));
+  const W = Math.round(dw * scale);
+  const H = Math.round(dh * scale);
+  const { canvas, ctx } = makeCanvas(W, H);
+  const temps: HTMLCanvasElement[] = [canvas];
   try {
-    const blended = drawable.some((o) => effectiveBlend(o) !== 'normal')
+    const blended = drawable.some((o) => effectiveBlend(o) !== "normal");
     if (!blended) {
-      drawObjects(ctx, drawable, W, H, 'export')
-      return await canvasBytes(canvas, 'image/png')
+      drawObjects(ctx, drawable, W, H, "export");
+      return await canvasBytes(canvas, "image/png");
     }
 
     // ── 혼합 모드가 있으면 페이지 래스터를 백드롭으로 깔고 블렌드한 뒤,
     //    객체가 덮는 영역만 남긴다(destination-in) — 그 조각을 원본 벡터 위에 얹으면
     //    화면과 동일한 블렌드 결과가 되고 나머지 영역은 벡터가 유지된다.
-    const pageCanvas = document.createElement('canvas')
-    temps.push(pageCanvas)
-    await renderPage(ref, pageCanvas, scale)
-    ctx.fillStyle = '#ffffff'
-    ctx.fillRect(0, 0, W, H)
-    ctx.drawImage(pageCanvas, 0, 0, W, H)
-    drawObjects(ctx, drawable, W, H, 'export')
+    const pageCanvas = document.createElement("canvas");
+    temps.push(pageCanvas);
+    await renderPage(ref, pageCanvas, scale);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, W, H);
+    ctx.drawImage(pageCanvas, 0, 0, W, H);
+    drawObjects(ctx, drawable, W, H, "export");
     // 커버리지 마스크 (반투명 객체도 완전히 남도록 알파 증폭 — 굽힌 픽셀에 이미 혼합 결과가 들어있음)
-    const { canvas: mask, ctx: mctx } = makeCanvas(W, H)
-    temps.push(mask)
-    drawObjects(mctx, drawable, W, H, 'export')
-    const mi = mctx.getImageData(0, 0, W, H)
+    const { canvas: mask, ctx: mctx } = makeCanvas(W, H);
+    temps.push(mask);
+    drawObjects(mctx, drawable, W, H, "export");
+    const mi = mctx.getImageData(0, 0, W, H);
     for (let i = 3; i < mi.data.length; i += 4) {
-      const a = mi.data[i]
-      if (a > 0) mi.data[i] = Math.min(255, a * 3)
+      const a = mi.data[i];
+      if (a > 0) mi.data[i] = Math.min(255, a * 3);
     }
-    mctx.putImageData(mi, 0, 0)
-    ctx.globalCompositeOperation = 'destination-in'
-    ctx.drawImage(mask, 0, 0)
-    ctx.globalCompositeOperation = 'source-over'
-    return await canvasBytes(canvas, 'image/png')
+    mctx.putImageData(mi, 0, 0);
+    ctx.globalCompositeOperation = "destination-in";
+    ctx.drawImage(mask, 0, 0);
+    ctx.globalCompositeOperation = "source-over";
+    return await canvasBytes(canvas, "image/png");
   } finally {
-    temps.forEach(releaseCanvas)
+    temps.forEach(releaseCanvas);
   }
 }
 
 /** embedPage를 표시 방향에 맞게 회전해 얹는다. R = (소스회전 + 추가회전) % 360 */
 function drawEmbeddedRotated(
   page: PDFPage,
-  embedded: Awaited<ReturnType<PDFDocument['embedPage']>>,
+  embedded: Awaited<ReturnType<PDFDocument["embedPage"]>>,
   R: number,
   dw: number,
-  dh: number
+  dh: number,
 ): void {
   switch (((R % 360) + 360) % 360) {
     case 0:
-      page.drawPage(embedded, { x: 0, y: 0 })
-      break
+      page.drawPage(embedded, { x: 0, y: 0 });
+      break;
     case 90:
       // p → (0,dh) + rot(-90)·p = (py, dh-px)
-      page.drawPage(embedded, { x: 0, y: dh, rotate: degrees(-90) })
-      break
+      page.drawPage(embedded, { x: 0, y: dh, rotate: degrees(-90) });
+      break;
     case 180:
-      page.drawPage(embedded, { x: dw, y: dh, rotate: degrees(180) })
-      break
+      page.drawPage(embedded, { x: dw, y: dh, rotate: degrees(180) });
+      break;
     case 270:
-      page.drawPage(embedded, { x: dw, y: 0, rotate: degrees(90) })
-      break
+      page.drawPage(embedded, { x: dw, y: 0, rotate: degrees(90) });
+      break;
   }
 }
 
 export async function buildPdf(input: SaveInput): Promise<Uint8Array> {
-  const out = await PDFDocument.create()
-  const srcCache = new Map<string, PDFDocument>()
+  const out = await PDFDocument.create();
+  const srcCache = new Map<string, PDFDocument>();
   /** 같은 원본 페이지(복제 등)는 XObject 를 한 번만 임베드한다 — 출력 크기·시간 모두 절약 */
-  const embedCache = new Map<string, Awaited<ReturnType<PDFDocument['embedPage']>>>()
+  const embedCache = new Map<
+    string,
+    { embedded: Awaited<ReturnType<PDFDocument["embedPage"]>>; rotate: number }
+  >();
 
   async function srcDoc(docId: string): Promise<PDFDocument> {
-    let d = srcCache.get(docId)
+    let d = srcCache.get(docId);
     if (!d) {
-      d = await PDFDocument.load(getDocBytes(docId), { ignoreEncryption: true })
-      srcCache.set(docId, d)
+      d = await PDFDocument.load(getDocBytes(docId), {
+        ignoreEncryption: true,
+      });
+      srcCache.set(docId, d);
     }
-    return d
+    return d;
   }
 
-  const newPages: PDFPage[] = []
-  const linkAnnots: { page: PDFPage; dw: number; dh: number; link: LinkObj }[] = []
-  const noteAnnots: { page: PDFPage; dw: number; dh: number; note: NoteObj }[] = []
+  const newPages: PDFPage[] = [];
+  const linkAnnots: { page: PDFPage; dw: number; dh: number; link: LinkObj }[] =
+    [];
+  const noteAnnots: { page: PDFPage; dw: number; dh: number; note: NoteObj }[] =
+    [];
+
+  // 1차: 손대지 않은 페이지(객체·추가 회전 없음, 표시 크기 = 원본)는 문서별 copyPages 한 번, 나머지는 문서별 embedPages 한 번 — 복사기는 문서당 하나
+  const untouchedByRef = new Map<string, PDFPage>();
+  const untouchedByDoc = new Map<
+    string,
+    { refId: string; pageIndex: number }[]
+  >();
+  const originalsByDoc = new Map<string, number[]>();
+  const seenUntouched = new Set<string>();
+  for (const ref of input.pages) {
+    if (ref.docId === "blank") continue;
+    const objects = input.objectsByPage[ref.id] ?? [];
+    const size = input.displaySizes[ref.id];
+    const srcPage = (await srcDoc(ref.docId)).getPage(ref.pageIndex);
+    const sameSize =
+      !!size &&
+      Math.abs(srcPage.getWidth() - size.w) < 0.5 &&
+      Math.abs(srcPage.getHeight() - size.h) < 0.5;
+    const dupKey = `${ref.docId}:${ref.pageIndex}`;
+    // 복제된 페이지는 둘째부터 임베드(복사기가 같은 객체를 재사용해 페이지 사전이 트리에 두 번 들어간다)
+    if (
+      objects.length === 0 &&
+      ref.extraRotation % 360 === 0 &&
+      sameSize &&
+      !seenUntouched.has(dupKey)
+    ) {
+      seenUntouched.add(dupKey);
+      const list = untouchedByDoc.get(ref.docId) ?? [];
+      list.push({ refId: ref.id, pageIndex: ref.pageIndex });
+      untouchedByDoc.set(ref.docId, list);
+      continue;
+    }
+    const list = originalsByDoc.get(ref.docId) ?? [];
+    if (!list.includes(ref.pageIndex)) list.push(ref.pageIndex);
+    originalsByDoc.set(ref.docId, list);
+  }
+  for (const [docId, items] of untouchedByDoc) {
+    const copied = await out.copyPages(
+      await srcDoc(docId),
+      items.map((it) => it.pageIndex),
+    );
+    items.forEach((it, k) => untouchedByRef.set(it.refId, copied[k]));
+  }
+  for (const [docId, indices] of originalsByDoc) {
+    const src = await srcDoc(docId);
+    const srcPages = indices.map((i) => src.getPage(i));
+    const embedded = await out.embedPages(srcPages);
+    indices.forEach((i, k) =>
+      embedCache.set(`${docId}:${i}`, {
+        embedded: embedded[k],
+        rotate: srcPages[k].getRotation().angle,
+      }),
+    );
+  }
 
   for (const ref of input.pages) {
-    const size = input.displaySizes[ref.id]
-    if (!size) throw new Error(`no display size for page ${ref.id}`)
-    const { w: dw, h: dh } = size
-    const page = out.addPage([dw, dh])
-    newPages.push(page)
+    const size = input.displaySizes[ref.id];
+    if (!size) throw new Error(`no display size for page ${ref.id}`);
+    const { w: dw, h: dh } = size;
+    const untouched = untouchedByRef.get(ref.id);
+    const page = untouched ? out.addPage(untouched) : out.addPage([dw, dh]);
+    newPages.push(page);
 
-    if (ref.docId !== 'blank') {
-      const src = await srcDoc(ref.docId)
-      const srcPage = src.getPage(ref.pageIndex)
-      const srcRotate = srcPage.getRotation().angle
-      const key = `${ref.docId}:${ref.pageIndex}`
-      let embedded = embedCache.get(key)
-      if (!embedded) {
-        embedded = await out.embedPage(srcPage)
-        embedCache.set(key, embedded)
-      }
-      drawEmbeddedRotated(page, embedded, srcRotate + ref.extraRotation, dw, dh)
+    if (ref.docId !== "blank" && !untouched) {
+      const cached = embedCache.get(`${ref.docId}:${ref.pageIndex}`);
+      if (!cached)
+        throw new Error(`page not embedded: ${ref.docId}:${ref.pageIndex}`);
+      drawEmbeddedRotated(
+        page,
+        cached.embedded,
+        cached.rotate + ref.extraRotation,
+        dw,
+        dh,
+      );
     }
 
-    const objects = input.objectsByPage[ref.id] ?? []
-    const png = await burnOverlayPng(objects, dw, dh, ref)
+    const objects = input.objectsByPage[ref.id] ?? [];
+    const png = await burnOverlayPng(objects, dw, dh, ref);
     if (png) {
-      const img = await out.embedPng(png)
-      page.drawImage(img, { x: 0, y: 0, width: dw, height: dh })
+      const img = await out.embedPng(png);
+      page.drawImage(img, { x: 0, y: 0, width: dw, height: dh });
     }
     for (const o of objects) {
-      if (o.type === 'link') linkAnnots.push({ page, dw, dh, link: o })
-      if (o.type === 'note') noteAnnots.push({ page, dw, dh, note: o })
+      if (o.type === "link") linkAnnots.push({ page, dw, dh, link: o });
+      if (o.type === "note") noteAnnots.push({ page, dw, dh, note: o });
     }
   }
 
   // ── 주석(Annots) 추가: 페이지가 전부 만들어진 뒤 (page 링크 대상 참조 필요) ──
   for (const { page, dw, dh, link } of linkAnnots) {
-    const r = link.rect
-    const x1 = r.x * dw
-    const y1 = dh - (r.y + r.h) * dh
-    const x2 = (r.x + r.w) * dw
-    const y2 = dh - r.y * dh
-    let action
-    if (link.target.kind === 'url') {
-      const url = /^https?:\/\//i.test(link.target.url) ? link.target.url : `https://${link.target.url}`
-      action = out.context.obj({ Type: 'Action', S: 'URI', URI: PDFString.of(url) })
+    const r = link.rect;
+    const x1 = r.x * dw;
+    const y1 = dh - (r.y + r.h) * dh;
+    const x2 = (r.x + r.w) * dw;
+    const y2 = dh - r.y * dh;
+    let action;
+    if (link.target.kind === "url") {
+      const url = /^https?:\/\//i.test(link.target.url)
+        ? link.target.url
+        : `https://${link.target.url}`;
+      action = out.context.obj({
+        Type: "Action",
+        S: "URI",
+        URI: PDFString.of(url),
+      });
     } else {
-      const idx = Math.min(Math.max(1, link.target.page), newPages.length) - 1
-      action = out.context.obj({ Type: 'Action', S: 'GoTo', D: [newPages[idx].ref, PDFName.of('Fit')] })
+      const idx = Math.min(Math.max(1, link.target.page), newPages.length) - 1;
+      action = out.context.obj({
+        Type: "Action",
+        S: "GoTo",
+        D: [newPages[idx].ref, PDFName.of("Fit")],
+      });
     }
     const annot = out.context.obj({
-      Type: 'Annot',
-      Subtype: 'Link',
+      Type: "Annot",
+      Subtype: "Link",
       Rect: [x1, y1, x2, y2],
       Border: [0, 0, 0],
-      A: action
-    })
-    addAnnot(page, out, annot)
+      A: action,
+    });
+    addAnnot(page, out, annot);
   }
 
   for (const { page, dw, dh, note } of noteAnnots) {
-    const x = note.x * dw
-    const y = dh - note.y * dh
+    const x = note.x * dw;
+    const y = dh - note.y * dh;
     const annot = out.context.obj({
-      Type: 'Annot',
-      Subtype: 'Text',
+      Type: "Annot",
+      Subtype: "Text",
       Rect: [x, y - 20, x + 20, y],
       Contents: PDFHexString.fromText(note.text),
-      Name: 'Comment',
+      Name: "Comment",
       C: hexToRgb(note.color),
-      F: 4 // Print flag
-    })
-    addAnnot(page, out, annot)
+      F: 4, // Print flag
+    });
+    addAnnot(page, out, annot);
   }
 
-  return out.save()
+  return out.save();
 }
 
 function addAnnot(page: PDFPage, doc: PDFDocument, annot: PDFObject): void {
-  const ref = doc.context.register(annot)
-  const existing = page.node.lookup(PDFName.of('Annots'))
+  const ref = doc.context.register(annot);
+  const existing = page.node.lookup(PDFName.of("Annots"));
   if (existing instanceof PDFArray) {
-    existing.push(ref)
+    existing.push(ref);
   } else {
-    page.node.set(PDFName.of('Annots'), doc.context.obj([ref]))
+    page.node.set(PDFName.of("Annots"), doc.context.obj([ref]));
   }
 }

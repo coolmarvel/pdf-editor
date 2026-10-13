@@ -64,13 +64,13 @@ export default function SearchBar(): JSX.Element | null {
         zIndex: 30,
         display: 'flex',
         alignItems: 'center',
-        gap: 0.5,
-        px: 1,
-        py: 0.4,
-        bgcolor: '#fff',
-        borderRadius: 1.5,
-        border: `1px solid ${ui.gray[200]}`,
-        boxShadow: ui.shadow.lg // floating 층 규격(DESIGN.md)
+        gap: `${ui.classic.space.sm}px`,
+        px: `${ui.classic.space.sm}px`,
+        py: `${ui.classic.space.xs}px`,
+        bgcolor: ui.classic.color.canvas,
+        borderRadius: 0,
+        border: `1px solid ${ui.classic.chrome.frame}`,
+        boxShadow: ui.classic.shadow.raised // 떠 있는 층 — 클래식 짧은 그림자
       }}
     >
       <InputBase
@@ -90,11 +90,12 @@ export default function SearchBar(): JSX.Element | null {
             else searchNext()
           }
         }}
-        sx={{ width: { xs: 'auto', sm: 200 }, flex: { xs: 1, sm: 'none' }, minWidth: 0, fontSize: 14, px: 0.5 }}
+        sx={{ width: { xs: 'auto', sm: 200 }, flex: { xs: 1, sm: 'none' }, minWidth: 0, fontSize: ui.classic.font.md, px: `${ui.classic.space.sm}px`, height: ui.classic.size.ctlMd, border: `1px solid ${ui.classic.color.borderStrong}`, bgcolor: ui.classic.color.input }}
       />
       <Typography
         data-testid="search-counter"
-        sx={{ fontSize: 13, color: hasQuery && total === 0 ? 'error.main' : 'text.secondary', minWidth: 52, textAlign: 'center', whiteSpace: 'nowrap' }}
+        className="tnum"
+        sx={{ fontSize: ui.classic.font.xs, color: hasQuery && total === 0 ? 'error.main' : 'text.secondary', minWidth: 52, textAlign: 'center', whiteSpace: 'nowrap' }}
       >
         {hasQuery && total === 0 ? t('searchNoResults') : `${total ? current + 1 : 0} / ${total}`}
       </Typography>

@@ -9,7 +9,7 @@ import type { LucideIcon } from 'lucide-react'
  * SvgIcon 의 기본 CSS(fill: currentColor)가 lucide 의 fill="none" 속성을 덮어쓰므로 sx 로 fill:none 을 되돌린다.
  * 굵기는 1.5(DESIGN.md icon 토큰: lucide 20px stroke 1.5 round).
  */
-const STROKE_WIDTH = 1.5
+const STROKE_WIDTH = 1.75 // 클래식 16px 에서 또렷하게 (sh-form-designer 선 아이콘 1.7)
 
 function wrap(Icon: LucideIcon, name: string): (props: SvgIconProps) => JSX.Element {
   const C = (props: SvgIconProps): JSX.Element => (

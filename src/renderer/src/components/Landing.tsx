@@ -1,3 +1,4 @@
+/** 데스크톱 랜딩 — 클래식(pdf-editor-live ADR-0004): 타이틀 띠 + 가운데 "PDF 열기" 패널(점선 드롭 영역, 주 버튼 하나) + 기능 목록. 파일 선택/드롭으로 문서 열기 + 언어 선택 */
 import { useCallback, useState } from 'react'
 import Box from '@mui/material/Box'
 import Stack from '@mui/material/Stack'
@@ -7,13 +8,17 @@ import ToggleButton from '@mui/material/ToggleButton'
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import { useEditor } from '@renderer/store/editor'
 import { useT } from '@renderer/i18n'
+import { ui } from '@renderer/theme'
 import { FilePen, FileText, FileUp, Languages, Shield, Zap } from './icons'
+import PanelTitle from './classic/PanelTitle'
+
+const { color, chrome, size, space, font, surface, shadow } = ui.classic
 
 function Feature({ icon, label }: { icon: JSX.Element; label: string }): JSX.Element {
   return (
-    <Stack direction="row" spacing={1} alignItems="center" sx={{ color: 'text.secondary' }}>
+    <Stack direction="row" spacing={`${space.base}px`} alignItems="center" sx={{ color: color.text, height: size.row, '& svg': { fontSize: size.icon, color: color.textSecondary } }}>
       {icon}
-      <Typography variant="body2" fontWeight={600}>
+      <Typography variant="body2" sx={{ whiteSpace: 'nowrap' }}>
         {label}
       </Typography>
     </Stack>
@@ -52,92 +57,66 @@ export default function Landing(): JSX.Element {
   )
 
   return (
-    <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.default', p: 3, position: 'relative' }}>
-      {/* 언어 선택 (우측 상단) */}
-      <Stack direction="row" spacing={1} alignItems="center" sx={{ position: 'absolute', top: 16, right: 20 }}>
-        <Languages sx={{ color: 'text.secondary', fontSize: 20 }} />
-        <ToggleButtonGroup
-          size="small"
-          exclusive
-          value={lang}
-          onChange={(_, v) => v && setLang(v)}
-          sx={{ '& .MuiToggleButton-root': { px: 1.5, py: 0.3, fontSize: 13, textTransform: 'none' } }}
-        >
+    <Box className="classic-app" sx={{ height: '100vh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
+      {/* 타이틀 띠 */}
+      <Box sx={{ height: size.titleBar, flexShrink: 0, display: 'flex', alignItems: 'center', gap: `${space.sm}px`, px: `${space.base}px`, background: surface.chrome, borderBottom: `1px solid ${chrome.frame}` }}>
+        <FileText sx={{ fontSize: size.icon, color: color.accentPressed }} />
+        <Typography sx={{ fontSize: font.md, fontWeight: font.bold, whiteSpace: 'nowrap' }}>{t('appName')}</Typography>
+        <Box sx={{ flex: 1 }} />
+        {/* 언어 선택 */}
+        <Languages sx={{ color: color.textSecondary, fontSize: size.icon }} />
+        <ToggleButtonGroup size="small" exclusive value={lang} onChange={(_, v) => v && setLang(v)} sx={{ '& .MuiToggleButton-root': { height: 20, px: `${space.base}px`, fontSize: font.xs } }}>
           <ToggleButton value="ko">한국어</ToggleButton>
           <ToggleButton value="en">English</ToggleButton>
         </ToggleButtonGroup>
-      </Stack>
-
-      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 4 }}>
-        <FileText color="primary" sx={{ fontSize: 34 }} />
-        <Typography variant="h5" fontWeight={800}>
-          {t('appName')}
-        </Typography>
-      </Stack>
-
-      <Typography variant="h4" fontWeight={800} gutterBottom>
-        {t('landingTitle')}
-      </Typography>
-      <Typography color="text.secondary" sx={{ mb: 4 }}>
-        {t('landingSubtitle')}
-      </Typography>
-
-      <Box
-        onDragOver={(e) => {
-          e.preventDefault()
-          setDragOver(true)
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={onDrop}
-        sx={{
-          width: 560,
-          maxWidth: '90vw',
-          border: '2px dashed',
-          borderColor: dragOver ? 'primary.main' : '#d0d5dd',
-          borderRadius: 4,
-          p: 1.5,
-          bgcolor: '#fff',
-          boxShadow: '0px 1px 3px 0px rgba(16, 24, 40, 0.1), 0px 1px 2px 0px rgba(16, 24, 40, 0.06)',
-          transition: 'border-color .15s'
-        }}
-      >
-        <Box
-          sx={{
-            bgcolor: 'primary.main',
-            borderRadius: 3,
-            py: 6,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 2
-          }}
-        >
-          <Button
-            variant="contained"
-            size="large"
-            startIcon={<FileUp />}
-            onClick={openFile}
-            sx={{ bgcolor: '#fff', color: 'primary.main', px: 4, py: 1.4, fontSize: 16, '&:hover': { bgcolor: '#e6f2ea' } }}
-          >
-            {t('choosePdf')}
-          </Button>
-          <Typography sx={{ color: 'rgba(255,255,255,.9)' }} variant="body2">
-            {t('orDrop')}
-          </Typography>
-        </Box>
       </Box>
 
-      {error && (
-        <Typography color="error" variant="body2" sx={{ mt: 2 }}>
-          {error}
-        </Typography>
-      )}
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', p: `${space.xl}px`, gap: `${space.lg}px` }}>
+        <Typography sx={{ fontSize: font.hero, fontWeight: font.bold, lineHeight: font.lhTight, whiteSpace: 'nowrap' }}>{t('landingTitle')}</Typography>
+        <Typography sx={{ color: color.textSecondary, textAlign: 'center', maxWidth: 560 }}>{t('landingSubtitle')}</Typography>
 
-      <Stack direction="row" spacing={4} sx={{ mt: 5 }}>
-        <Feature icon={<Shield fontSize="small" />} label={t('featOffline')} />
-        <Feature icon={<FilePen fontSize="small" />} label={t('featEasy')} />
-        <Feature icon={<Zap fontSize="small" />} label={t('featFast')} />
-      </Stack>
+        {/* "PDF 열기" 패널 */}
+        <Box sx={{ width: 520, maxWidth: '90vw', bgcolor: color.canvas, border: `1px solid ${chrome.frame}`, boxShadow: shadow.raised }}>
+          <PanelTitle>{t('choosePdf')}</PanelTitle>
+          <Box
+            onDragOver={(e) => {
+              e.preventDefault()
+              setDragOver(true)
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={onDrop}
+            sx={{
+              m: `${space.lg}px`,
+              py: `${space.xl * 2}px`,
+              border: `1px dashed ${dragOver ? color.accent : color.borderStrong}`,
+              bgcolor: dragOver ? color.accentSubtle : color.sunken,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: `${space.lg}px`
+            }}
+          >
+            <FileUp sx={{ fontSize: 32, color: color.textSecondary }} />
+            <Button variant="contained" startIcon={<FileUp />} onClick={openFile}>
+              {t('choosePdf')}
+            </Button>
+            <Typography variant="body2" sx={{ color: color.textSecondary, whiteSpace: 'nowrap' }}>
+              {t('orDrop')}
+            </Typography>
+          </Box>
+          {error && (
+            <Typography color="error" variant="body2" sx={{ px: `${space.lg}px`, pb: `${space.lg}px` }}>
+              {error}
+            </Typography>
+          )}
+        </Box>
+
+        <Stack direction="row" spacing={`${space.xl}px`}>
+          <Feature icon={<Shield />} label={t('featOffline')} />
+          <Feature icon={<FilePen />} label={t('featEasy')} />
+          <Feature icon={<Zap />} label={t('featFast')} />
+        </Stack>
+      </Box>
     </Box>
   )
 }
