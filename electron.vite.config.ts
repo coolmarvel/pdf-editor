@@ -20,9 +20,7 @@ export default defineConfig({
       }
     },
     plugins: [react()],
-    optimizeDeps: {
-      // pdfjs 워커 사전 번들 이슈 회피
-      exclude: ['pdfjs-dist']
-    }
+    // Rust/wasm 엔진 워커(src/renderer/src/engine/worker.ts)는 ESM import 를 쓴다(wasm-bindgen 글루). wasm 은 `?url` 자산으로 나간다
+    worker: { format: 'es' }
   }
 })

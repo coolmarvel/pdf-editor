@@ -91,13 +91,18 @@ npm run pack:win     # Wine 없이 폴더 확인용 → release/win-unpacked/
 
 # Playwright 시각 자가검증 (WSLg 디스플레이 필요; npm run build 후):
 node e2e/visual-check.cjs   # Electron 실행→PDF 드롭→텍스트 배치/선택/언두 스크린샷 + 중앙정렬 픽셀 계측
+# (search-check·pages-check·draft-check 도 같은 방식. 픽스처 PDF 는 e2e/minipdf.cjs)
+xvfb-run -a node e2e/engine-smoke.cjs   # 엔진 스모크: 열기·잉크·스팬 검색·텍스트 추가·저장 → pdfinfo/pdffonts/pdftoppm 검사 (산출물 e2e/.engine/)
 # 스크린샷은 e2e/ 에 떨어짐(E2E_OUT 로 변경 가능). Read 로 직접 보고 판단할 것. *.png 는 커밋/보관 대상 아님
 ```
 
 ## 코드 지도 (수정 시 어디를 보나)
 
 - **순수 로직(테스트 대상)**: `src/core/` — `objects.ts`(편집 객체 모델·회전·히트테스트), `pages.ts`(페이지 연산), `history.ts`(undo/redo)
-- **PDF 서비스**: `src/renderer/src/pdf/` — `docs.ts`(pdf.js 렌더·텍스트 추출·소스 문서 저장소), `save.ts`(pdf-lib 저장: 평탄화+오버레이 굽기+링크/노트 주석)
+- **PDF 엔진(v1.8.0~, ADR-0003)**: Rust/wasm `pdf-engine`(hayro + lopdf) 하나뿐 — pdf.js·pdf-lib 는 의존성에서 지웠고 다시 넣지 않는다(사용자 지시 2026-10-29).
+  `src/renderer/src/engine/` — `pkg/`(모노레포 `~/pdf-editor-live/packages/engine/pkg` **사본**, 손으로 고치지 않음; 출처·해시·갱신법 `pkg/README.md`, 여기서 cargo/wasm-pack 을 돌리지 않는다), `worker.ts`(모듈 워커), `client.ts`(RPC·렌더 합치기·트랩 감지), `types.ts`(계약).
+  CSP `'wasm-unsafe-eval'`(`src/renderer/index.html`) · `worker.format: 'es'`(electron.vite.config.ts) 가 빠지면 엔진이 안 뜬다. 비내장 서체 대체 = 번들 `assets/fonts/NanumGothic-Regular.ttf`.
+- **PDF 서비스**: `src/renderer/src/pdf/` — `registry.ts`(소스 바이트 + 엔진 문서 id, 워커 트랩 시 다시 열기), `docs.ts`(표시 크기·캔버스 렌더·텍스트 스팬), `save.ts`(엔진 `build_document`: 원본 페이지 복사·회전 + 오버레이 PNG + 링크/노트 주석), `imageToPdf.ts`(엔진, 빈 페이지 + 이미지)
 - **객체 렌더러(오버레이=내보내기 공유)**: `src/renderer/src/editor/draw.ts`, 스탬프/서명 비트맵: `editor/stamp.ts`
 - **전역 상태**: `src/renderer/src/store/editor.ts` (zustand — 문서·객체·히스토리·도구 설정)
 - **화면**: `src/renderer/src/components/` — `Editor.tsx`(셸·저장·인쇄·단축키), `Toolbar.tsx`/`SubToolbar.tsx`, `PageCanvas.tsx`(**도구 인터랙션 전부**), `PagesView.tsx`(스크롤·줌·fit), `ThumbnailSidebar`, `FloatingPager`, 다이얼로그: `ManagePagesDialog`/`StampDialog`/`SignDialog`

@@ -4,9 +4,10 @@
     <meta charset="UTF-8" />
     <title>PDF 편집기</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- wasm-unsafe-eval: Rust 엔진(WebAssembly.compile) 허용. worker-src: 엔진 워커. connect-src: 엔진 wasm·대체 서체 fetch -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self' data: blob:"
     />
   </head>
   <body>

@@ -59,7 +59,7 @@ export const FONT_STACKS: Record<string, string> = {
   Pacifico: `Pacifico, cursive`
 }
 
-/** 원본 PDF 폰트명(예: `ABCDEF+NanumGothic-Bold`, `TimesNewRomanPSMT`, `Helvetica-BoldOblique`) → 우리 목록의 키. fallback = pdf.js 의 generic family */
+/** 원본 PDF 폰트명(예: `ABCDEF+NanumGothic-Bold`, `TimesNewRomanPSMT`, `Helvetica-BoldOblique`) → 우리 목록의 키. fallback = 엔진 스팬의 serif·mono 플래그로 고른 generic family */
 const FONT_ALIASES: [RegExp, string][] = [
   [/malgun|맑은/, '맑은고딕'],
   [/batang|바탕/, '바탕'],
@@ -216,7 +216,7 @@ export function measureTextWidthPx(text: string, size: number, font: string, bol
 
 function drawEditText(ctx: CanvasRenderingContext2D, t: EditTextObj, W: number, H: number): void {
   // 원본 덮기 — cover 는 이동과 무관하게 원래 자리에 남는다.
-  // pdf.js 스팬 rect 가 글리프 상단/하단을 1~2px 못 덮는 경우가 있어 세로 여유를 더 준다
+  // 스팬 rect 가 글리프 상단/하단을 1~2px 못 덮는 경우가 있어 세로 여유를 더 준다
   ctx.fillStyle = '#ffffff'
   const padX = t.cover.h * H * 0.08 + 1.5
   const padY = t.cover.h * H * 0.18 + 1.5

@@ -19,3 +19,6 @@ tailadmin-nextjs-pro-225/
 
 # 클래식 UI 포팅 확인 스크린샷(2026-10-12, 추적 안 함)
 e2e/.classic/
+
+# 엔진 스모크 산출물(저장 PDF·스크린샷, 2026-10-29)
+e2e/.engine/

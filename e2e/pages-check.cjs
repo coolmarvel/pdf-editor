@@ -2,17 +2,11 @@
 const path = require('path')
 const ROOT = path.join(__dirname, '..')
 const { _electron } = require(path.join(ROOT, 'node_modules', 'playwright-core'))
-const { PDFDocument, StandardFonts } = require(path.join(ROOT, 'node_modules', 'pdf-lib'))
+const { makeTextPdf } = require('./minipdf.cjs')
 const OUT = process.env.E2E_OUT ?? __dirname
 
 async function main() {
-  const doc = await PDFDocument.create()
-  const font = await doc.embedFont(StandardFonts.Helvetica)
-  for (let i = 0; i < 4; i++) {
-    const p = doc.addPage([595, 842])
-    p.drawText(`PAGE ${i + 1}`, { x: 200, y: 500, size: 60, font })
-  }
-  const pdf = Buffer.from(await doc.save())
+  const pdf = makeTextPdf([1, 2, 3, 4].map((n) => ({ w: 595, h: 842, texts: [{ x: 200, y: 500, size: 60, text: `PAGE ${n}` }] })))
 
   const app = await _electron.launch({
     executablePath: require(path.join(ROOT, 'node_modules', 'electron')),

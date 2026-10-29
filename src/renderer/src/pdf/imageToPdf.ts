@@ -11,8 +11,11 @@
  * - 이미지가 가로인데 기준 용지가 세로면 **같은 용지의 가로 방향**으로 자동 전환(그 반대도).
  *   → 용지 규격은 유지되면서 위아래 흰 띠 낭비가 사라진다.
  * - 여백 0 (가장자리까지 꽉).
+ *
+ * 조립: Rust 엔진 `buildDocument`(빈 페이지 + `under` 이미지). 비트맵은 PNG/JPEG 바이트 그대로, 그 외 포맷·EXIF 회전·과대 이미지는 캔버스로 다시 구운다.
  */
-import { PDFDocument } from 'pdf-lib'
+import type { EngineBuildSpec, EnginePageSpec } from '@renderer/engine/types'
+import { wasmEngine } from '@renderer/engine/client'
 import { makeCanvas, releaseCanvas, canvasBytes } from '@renderer/editor/canvasUtil'
 
 /** 재인코딩 시 긴 변 상한 (A4 300dpi ≈ 3508px). 원본이 이보다 크면 저장 파일이 과하게 불어난다 */
@@ -92,70 +95,73 @@ async function reencode(bmp: ImageBitmap, asPng: boolean): Promise<{ bytes: Uint
   }
 }
 
-/**
- * 이미지 파일 하나 → 1페이지 PDF 바이트.
- * 디코딩 불가 포맷(HEIC/TIFF 등 Chromium 미지원)은 throw 한다 — 호출부에서 안내.
- */
-export async function imageFileToPdfBytes(file: Blob, opt: ImagePageOptions): Promise<Uint8Array> {
-  const raw = new Uint8Array(await file.arrayBuffer())
-  const type = sniff(raw)
-  // EXIF 회전은 브라우저가 적용해 준다 — 우리는 "적용 결과"만 쓰면 된다
-  const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' })
-
-  try {
-    const oversized = Math.max(bmp.width, bmp.height) > MAX_EDGE
-    const rotated = type === 'jpeg' && jpegOrientation(raw) !== 1
-    const passthrough = type !== 'other' && !oversized && !rotated
-
-    const doc = await PDFDocument.create()
-    const embed = (bytes: Uint8Array, kind: 'jpeg' | 'png'): ReturnType<typeof doc.embedJpg> | ReturnType<typeof doc.embedPng> =>
-      kind === 'jpeg' ? doc.embedJpg(bytes) : doc.embedPng(bytes)
-    const reembed = async (): ReturnType<typeof embed> => {
-      const re = await reencode(bmp, type === 'png')
-      return embed(re.bytes, re.kind)
-    }
-    let img: Awaited<ReturnType<typeof embed>>
-    if (passthrough) {
-      try {
-        img = await embed(raw, type as 'jpeg' | 'png')
-      } catch {
-        // pdf-lib 이 못 읽는 변종(16bit PNG, 인터레이스 등) — 캔버스로 다시 구워 재시도
-        img = await reembed()
-      }
-    } else {
-      img = await reembed()
-    }
-
-    // 이미지 방향에 맞춰 용지 방향만 전환 (용지 규격 자체는 유지)
-    let pw = opt.pageW
-    let ph = opt.pageH
-    if (img.width > img.height !== pw > ph) {
-      const t = pw
-      pw = ph
-      ph = t
-    }
-
-    const page = doc.addPage([pw, ph])
-    const s = Math.min(pw / img.width, ph / img.height)
-    const w = img.width * s
-    const h = img.height * s
-    page.drawImage(img, { x: (pw - w) / 2, y: (ph - h) / 2, width: w, height: h })
-    return await doc.save()
-  } finally {
-    bmp.close()
-  }
+/** 디코드 결과 — `passthrough` 면 원본 바이트(PNG/JPEG)를 그대로 임베드할 수 있다 */
+interface DecodedImage {
+  raw: Uint8Array
+  type: 'jpeg' | 'png' | 'other'
+  bmp: ImageBitmap
+  passthrough: boolean
 }
 
-/** 이미지 여러 장 → 각각 1페이지인 PDF 한 개 (선택 순서 유지) */
-export async function imageFilesToPdfBytes(files: Blob[], opt: ImagePageOptions): Promise<Uint8Array> {
-  if (files.length === 1) return imageFileToPdfBytes(files[0], opt)
-  const merged = await PDFDocument.create()
-  for (const f of files) {
-    const one = await PDFDocument.load(await imageFileToPdfBytes(f, opt))
-    const [p] = await merged.copyPages(one, [0])
-    merged.addPage(p)
+/**
+ * 이미지 파일을 디코드한다. 디코딩 불가 포맷(HEIC/TIFF 등 Chromium 미지원)은 throw — 호출부에서 안내.
+ * EXIF 회전은 브라우저가 적용해 준다 — 우리는 "적용 결과"(bmp)만 쓰면 된다. 호출자가 `bmp.close()` 를 책임진다.
+ */
+async function decodeImage(file: Blob): Promise<DecodedImage> {
+  const raw = new Uint8Array(await file.arrayBuffer())
+  const type = sniff(raw)
+  const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' })
+  const oversized = Math.max(bmp.width, bmp.height) > MAX_EDGE
+  const rotated = type === 'jpeg' && jpegOrientation(raw) !== 1
+  return { raw, type, bmp, passthrough: type !== 'other' && !oversized && !rotated }
+}
+
+/** 용지(pw×ph)와 이미지 자리 — 이미지 방향에 맞춰 용지 방향만 전환(규격 유지), 비율 유지 fit, 가운데 */
+function placeOnPaper(imgW: number, imgH: number, opt: ImagePageOptions): { pw: number; ph: number; x: number; y: number; w: number; h: number } {
+  let pw = opt.pageW
+  let ph = opt.pageH
+  if (imgW > imgH !== pw > ph) {
+    const t = pw
+    pw = ph
+    ph = t
   }
-  return merged.save()
+  const s = Math.min(pw / imgW, ph / imgH)
+  const w = imgW * s
+  const h = imgH * s
+  return { pw, ph, x: (pw - w) / 2, y: (ph - h) / 2, w, h }
+}
+
+/**
+ * 이미지 여러 장 → 각각 1페이지인 PDF 한 개 (선택 순서 유지). Rust 엔진 `buildDocument` 에 이미지마다 빈 페이지 + `under` 이미지 한 장을
+ * 명세로 보내 한 번에 조립한다. 첫 시도는 PNG/JPEG 원본 바이트 그대로(엔진이 디코드·JPEG 는 DCTDecode 통과) → 엔진이 못 읽는 변종
+ * (16bit PNG 등)이면 빌드가 실패하므로 전부 캔버스로 다시 구워 한 번 재시도.
+ */
+export async function imageFilesToPdfBytes(files: Blob[], opt: ImagePageOptions): Promise<Uint8Array> {
+  const decoded: DecodedImage[] = []
+  try {
+    for (const f of files) decoded.push(await decodeImage(f))
+    const build = async (reencodeAll: boolean): Promise<Uint8Array> => {
+      const bitmaps: Uint8Array[] = []
+      const pages: EnginePageSpec[] = []
+      for (const d of decoded) {
+        // buildDocument 가 비트맵 버퍼를 transfer 하므로 원본은 사본으로 보낸다(재시도가 다시 쓸 수 있게)
+        const bytes = d.passthrough && !reencodeAll ? d.raw.slice() : (await reencode(d.bmp, d.type === 'png')).bytes
+        const { pw, ph, x, y, w, h } = placeOnPaper(d.bmp.width, d.bmp.height, opt)
+        pages.push({ width: pw, height: ph, under: [{ bitmap: bitmaps.length, x, y, w, h }] })
+        bitmaps.push(bytes)
+      }
+      const spec: EngineBuildSpec = { pages }
+      return wasmEngine.buildDocument(JSON.stringify(spec), bitmaps)
+    }
+    if (!decoded.some((d) => d.passthrough)) return await build(true)
+    try {
+      return await build(false)
+    } catch {
+      return await build(true)
+    }
+  } finally {
+    for (const d of decoded) d.bmp.close()
+  }
 }
 
 /** 확장자/MIME 기반 1차 필터 (실제 판별은 매직 바이트) */

@@ -5,8 +5,8 @@
  * cachedDataRejected 로 앱이 죽는다. 난독화된 JS 는 플랫폼 무관.
  *
  * 보수 설정 원칙: 기능·성능에 영향 주는 옵션(controlFlowFlattening, deadCodeInjection,
- * selfDefending)은 끄고, 문자열 숨김 + 식별자 hex 화만 적용. pdf.worker 는 크고(1.4MB)
- * 성능 민감이라 제외(pdf.js 는 공개 라이브러리라 보호 가치도 없음).
+ * selfDefending)은 끄고, 문자열 숨김 + 식별자 hex 화만 적용. Rust 엔진 워커(wasm-bindgen 글루 포함)도 같은 설정으로
+ * 난독화된다 — 엔진 본체는 .wasm 이라 대상이 아니다.
  *
  * 실행: npm run build 파이프라인에서 자동 (electron-vite build 직후)
  */
@@ -22,7 +22,7 @@ const targets = [
   out('preload', 'index.js'),
   ...fs
     .readdirSync(assetsDir)
-    .filter((f) => f.endsWith('.js') && !f.includes('pdf.worker'))
+    .filter((f) => f.endsWith('.js'))
     .map((f) => path.join(assetsDir, f))
 ]
 

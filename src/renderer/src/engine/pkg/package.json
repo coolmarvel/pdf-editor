@@ -1,0 +1,17 @@
+{
+  "name": "pdf-engine",
+  "type": "module",
+  "description": "pdf-editor Rust/WebAssembly PDF engine (hayro rasterizer + lopdf document model)",
+  "version": "0.1.0",
+  "license": "UNLICENSED",
+  "files": [
+    "pdf_engine_bg.wasm",
+    "pdf_engine.js",
+    "pdf_engine.d.ts"
+  ],
+  "main": "pdf_engine.js",
+  "types": "pdf_engine.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

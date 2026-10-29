@@ -5,21 +5,23 @@ const fs = require('fs')
 const ROOT = path.join(__dirname, '..')
 const OUT = process.env.E2E_OUT ?? __dirname
 const { _electron } = require(path.join(ROOT, 'node_modules', 'playwright-core'))
-const { PDFDocument, StandardFonts } = require(path.join(ROOT, 'node_modules', 'pdf-lib'))
+const { makeTextPdf } = require('./minipdf.cjs')
 
 const WORD = 'orange'
 
 /** 2페이지: "Sample page N" + 반복 단어 줄(한 스팬 안에 3회) */
 async function makePdf() {
-  const doc = await PDFDocument.create()
-  const font = await doc.embedFont(StandardFonts.Helvetica)
-  for (let i = 0; i < 2; i++) {
-    const p = doc.addPage([595, 842])
-    p.drawText(`Sample page ${i + 1}`, { x: 60, y: 760, size: 24, font })
-    p.drawText(`An ${WORD} tree, an ${WORD} fruit and Orange juice.`, { x: 60, y: 700, size: 18, font })
-    p.drawText(`Nothing to see here on page ${i + 1}.`, { x: 60, y: 660, size: 14, font })
-  }
-  return Buffer.from(await doc.save())
+  return makeTextPdf(
+    [1, 2].map((n) => ({
+      w: 595,
+      h: 842,
+      texts: [
+        { x: 60, y: 760, size: 24, text: `Sample page ${n}` },
+        { x: 60, y: 700, size: 18, text: `An ${WORD} tree, an ${WORD} fruit and Orange juice.` },
+        { x: 60, y: 660, size: 14, text: `Nothing to see here on page ${n}.` }
+      ]
+    }))
+  )
 }
 
 function assert(cond, msg) {
@@ -55,8 +57,8 @@ async function main() {
   await win.waitForTimeout(1000)
 
   const counter = () => win.locator('[data-testid="search-counter"]').textContent()
-  const pagerText = () => win.evaluate(() => [...document.querySelectorAll('p')].map((p) => p.textContent).find((t) => /^\d+\/\d+$/.test(t)))
-  /** 현재 페이지(0-base) — 플로팅 페이저 "N/M" 텍스트로 읽는다 (store 는 window 에 노출되지 않음) */
+  const pagerText = () => win.evaluate(() => document.querySelector('[data-testid="page-counter"]')?.textContent?.trim())
+  /** 현재 페이지(0-base) — 상태 줄 페이지 칸(page-counter) "N/M" 텍스트로 읽는다 (store 는 window 에 노출되지 않음) */
   const curPage = async () => Number((await pagerText()).split('/')[0]) - 1
 
   // ── 검색 버튼 → 바 열림 + 입력 포커스 ──

@@ -2,14 +2,11 @@
 const path = require('path')
 const ROOT = path.join(__dirname, '..')
 const { _electron } = require(path.join(ROOT, 'node_modules', 'playwright-core'))
-const { PDFDocument, StandardFonts } = require(path.join(ROOT, 'node_modules', 'pdf-lib'))
+const { makeTextPdf } = require('./minipdf.cjs')
 const OUT = process.env.E2E_OUT ?? __dirname
 
 async function makePdf(n) {
-  const doc = await PDFDocument.create()
-  const font = await doc.embedFont(StandardFonts.Helvetica)
-  for (let i = 0; i < n; i++) doc.addPage([595, 842]).drawText(`DRAFT PAGE ${i + 1}`, { x: 120, y: 500, size: 40, font })
-  return Buffer.from(await doc.save())
+  return makeTextPdf(Array.from({ length: n }, (_, i) => ({ w: 595, h: 842, texts: [{ x: 120, y: 500, size: 40, text: `DRAFT PAGE ${i + 1}` }] })))
 }
 
 async function dropPdf(win, pdf) {
@@ -74,8 +71,10 @@ async function main() {
     const info = await win.evaluate(() => {
       const dlg = document.querySelector('.MuiDialog-paper')
       const bar = dlg.firstElementChild
-      const tops = new Set([...bar.querySelectorAll('button')].map((b) => Math.round(b.getBoundingClientRect().top)))
-      return { dlgW: Math.round(dlg.getBoundingClientRect().width), rows: tops.size, barScroll: bar.scrollWidth > bar.clientWidth + 1 }
+      // 줄 수 = 버튼 세로 중심을 8px 이상 벌어질 때마다 새 줄로 센다 (클래식 UI 는 22px 아이콘 버튼과 24px 버튼이 섞여 top 이 1px 어긋난다)
+      const mids = [...bar.querySelectorAll('button')].map((b) => { const r = b.getBoundingClientRect(); return r.top + r.height / 2 }).sort((a, b) => a - b)
+      const rows = mids.reduce((n, m, i) => (i > 0 && m - mids[i - 1] > 8 ? n + 1 : n), mids.length ? 1 : 0)
+      return { dlgW: Math.round(dlg.getBoundingClientRect().width), rows, barScroll: bar.scrollWidth > bar.clientWidth + 1 }
     })
     check(info.rows === 1, `manage toolbar single row @${w}: ${JSON.stringify(info)}`)
     await win.keyboard.press('Escape')

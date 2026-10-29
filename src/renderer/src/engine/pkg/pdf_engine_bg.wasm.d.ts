@@ -1,0 +1,32 @@
+/* tslint:disable */
+/* eslint-disable */
+export const memory: WebAssembly.Memory;
+export const __wbg_renderedpage_free: (a: number, b: number) => void;
+export const build_document: (a: number, b: number, c: any) => [number, number, number, number];
+export const close: (a: number) => void;
+export const font_coverage: (a: number, b: number, c: number, d: number) => [number, number];
+export const font_program: (a: number, b: number, c: number) => [number, number, number];
+export const merge: (a: number, b: number) => [number, number, number, number];
+export const open: (a: number, b: number) => [number, number, number];
+export const open_with_password: (a: number, b: number, c: number, d: number) => [number, number, number];
+export const page_count: (a: number) => [number, number, number];
+export const page_erase_text: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+export const page_size: (a: number, b: number) => [number, number, number, number];
+export const page_text: (a: number, b: number) => [number, number, number];
+export const page_text_spans: (a: number, b: number) => [number, number, number];
+export const pages_subset: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
+export const render_page: (a: number, b: number, c: number, d: number) => [number, number, number];
+export const renderedpage_height: (a: number) => number;
+export const renderedpage_rgba: (a: number) => any;
+export const renderedpage_width: (a: number) => number;
+export const set_fallback_font: (a: number, b: number) => void;
+export const start: () => void;
+export const version: () => [number, number];
+export const __wbindgen_malloc: (a: number, b: number) => number;
+export const __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
+export const __wbindgen_free: (a: number, b: number, c: number) => void;
+export const __wbindgen_exn_store: (a: number) => void;
+export const __externref_table_alloc: () => number;
+export const __wbindgen_externrefs: WebAssembly.Table;
+export const __externref_table_dealloc: (a: number) => void;
+export const __wbindgen_start: () => void;

@@ -2,7 +2,7 @@
  * 편집기 전역 상태 (zustand).
  *
  * - 문서 = pages(PageRef[]) + objectsByPage(페이지 id → 객체 배열). 이 둘이 undo/redo 스냅샷 단위.
- * - 실제 PDF 바이트/pdf.js 프록시는 pdf/docs.ts 모듈에 격리 (여기는 참조 id만).
+ * - 실제 PDF 바이트/엔진 문서 id 는 pdf/registry.ts 모듈에 격리 (여기는 참조 id만).
  * - 모든 편집 액션은 commit() 을 거쳐 히스토리에 직전 상태를 쌓는다.
  */
 import { create } from 'zustand'

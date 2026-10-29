@@ -1,0 +1,10 @@
+NanumGothic-Regular.ttf
+Copyright (c) 2010 NHN Corporation (https://hangeul.naver.com), with Reserved Font Name Nanum, 나눔.
+Designed by Sandoll Communications Inc.
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is available with a FAQ at: http://scripts.sil.org/OFL
+
+Use in this project (pdf-editor-live, ADR-0003): loaded lazily by the Rust/wasm PDF engine as the
+fallback font for PDFs whose fonts are not embedded (hayro ships only the standard 14 fonts).
+The file is served as-is from /fonts/ and is not modified.

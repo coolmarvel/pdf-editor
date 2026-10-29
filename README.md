@@ -18,8 +18,8 @@ pdfguru.com 을 벤치마킹한 **오프라인 데스크톱 PDF 편집기**. 문
 |---|---|
 | 셸 | Electron 43 + electron-vite |
 | UI | React 18 + TypeScript + MUI 6 + zustand |
-| PDF 렌더 | pdf.js (pdfjs-dist) |
-| PDF 저장 | pdf-lib (평탄화 + 오버레이 굽기 + 주석) |
+| PDF 엔진 | Rust/WebAssembly `pdf-engine`(hayro 래스터 + lopdf 문서 모델, Web Worker) — 열기·렌더·텍스트 스팬·저장·이미지→PDF. `src/renderer/src/engine/pkg/` 에 사본(출처·갱신법은 그 폴더 README) |
+| PDF 저장 | 엔진 `build_document`(원본 페이지 복사 + 오버레이 PNG + 링크/노트 주석) |
 | 배포 | electron-builder NSIS(Windows) + custom DMG script(macOS) |
 
 ## 개발
@@ -43,7 +43,8 @@ src/core/      # 순수 로직: 객체 모델·페이지 연산·히스토리 (n
 src/main/      # Electron 메인: 창, 파일 열기/저장, 인쇄 IPC
 src/preload/   # contextBridge API
 src/renderer/  # React 앱
-  src/pdf/     # pdf.js 렌더·텍스트 추출 / pdf-lib 저장
+  src/pdf/     # 엔진 렌더·텍스트 스팬(docs/registry) / 엔진 저장(save) / 이미지→PDF
+  src/engine/  # Rust 엔진 워커·클라이언트·계약 + pkg/(wasm 사본)
   src/editor/  # 캔버스 객체 렌더러(화면=저장 공유), 스탬프/서명 생성
   src/store/   # zustand 전역 상태
   src/components/  # Editor 셸·툴바·페이지 캔버스·다이얼로그

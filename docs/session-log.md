@@ -1,7 +1,7 @@
 ---
 title: 세션 로그
 created: 2026-07-08
-updated: 2026-10-12
+updated: 2026-10-29
 domain: development
 ---
 
@@ -9,6 +9,25 @@ domain: development
 
 이 파일이 **"언제 무슨 일이 있었나"의 SSOT**다. 세션마다 최상단에 블록 추가.
 (2026-07-08부터 git 에 올리지만 커밋/푸시는 사용자가 직접·성긴 단위 — git history 를 이력 SSOT 로 삼지 않는다.)
+
+## 2026-10-29 — v1.8.0: PDF 엔진을 Rust/wasm 으로 교체(pdf.js·pdf-lib 제거) · ADR-0003
+
+**요청**: 모노레포(`~/pdf-editor-live`)의 Rust 엔진 **부분만** 적용("rust engine 부분만 적용"). v1.7.2 UI·스토어·객체 모델·i18n·동작은 그대로. 추가 지시: pdf-lib·pdf.js 는 코드·의존성 어디에도 남기지 않는다. 버전은 1.8.0(모노레포 `apps/desktop` 2.0.0 과 appId 가 같아 2.x 금지). 인스톨러는 굽지 않는다(사용자: 지금은 빌드·설치본 불필요).
+
+- **엔진 사본**: `src/renderer/src/engine/pkg/` = 모노레포 `packages/engine/pkg`(엔진 소스 커밋 `546d6ab` 빌드, wasm sha256 `babd3d33…9555`) 복사본 + `README.md`(출처·갱신법). 여기서 cargo/wasm-pack 은 돌리지 않았다(다른 작업이 엔진 소스를 바꾸는 중 — 리드가 최종 pkg 를 다시 복사).
+- **런타임**: `engine/{worker,client,types}.ts` — 모노레포 워커/클라이언트의 부분집합(open/close/pageCount/pageSize/render/pageTextSpans/setFallbackFont/buildDocument/version). 렌더 큐(같은 캔버스 key 합치기, in-flight 2, 본문 우선), 워커 트랩 → `onEngineReset`.
+- **pdf/**: `registry.ts` 신설(바이트 + 엔진 id, 트랩 뒤 다시 열기 10초 3회 상한, 대체 서체 등록) · `renderEpoch.ts` 신설(다시 연 뒤 캔버스 재렌더) · `docs.ts` 재작성(공개 API 동일: `registerDoc/getAllDocBytes/getDocBytes/clearDocs/getDisplaySize/renderPage/extractTextSpans/TextSpan`; 스팬 = 엔진 `page_text_spans`, 서체는 BaseFont → `matchFontFamily`, serif/mono 플래그로 generic) · `save.ts` 재작성(엔진 `build_document`: 페이지 `doc/page/rotation` + 전면 `overlay` PNG(기존 굽기 그대로, 혼합 모드 백드롭 렌더는 별도 큐 key `:export`) + `links`/`notes`) · `imageToPdf.ts`(빈 페이지 + `under`, 여러 장 한 번에, 원본 PNG/JPEG 실패 시 재인코딩 재시도). `usePageRender.ts` 는 `RenderHandle` + 렌더 세대 의존.
+- **셸**: CSP `script-src 'self' 'wasm-unsafe-eval'` + `connect-src 'self' data: blob:`, `electron.vite.config.ts` `worker.format: 'es'`(pdfjs `optimizeDeps` 제거), `scripts/obfuscate.cjs` 의 pdf.worker 제외 규칙 삭제(엔진 워커 JS 도 난독화, 14→17KB). 대체 서체 `assets/fonts/NanumGothic-Regular.ttf`(+OFL 라이선스)를 `?url` 자산으로 번들.
+- **의존성**: `npm uninstall pdf-lib pdfjs-dist`(fontkit 은 원래 없음), version 1.8.0, package-lock 동기화.
+- **e2e**: `e2e/minipdf.cjs`(의존성 없는 Helvetica 텍스트 PDF 작성기)로 4개 스크립트 픽스처 교체. `e2e/engine-smoke.cjs` 신설. 오래된 검사 2건 수정(엔진과 무관, v1.7.2 클래식 UI 이후 깨져 있었음): `search-check` 페이저 읽기를 `[data-testid="page-counter"]` 로, `draft-check` 페이지 관리 툴바 줄 수를 버튼 세로 중심 8px 군집으로(22px·24px 버튼 혼재로 top 이 1px 어긋남).
+- **문서**: ADR-0003 신설, ADR-0002·`guides/editor.md`·README·CLAUDE.md 엔진 메모, `scripts/upload-release-win.sh` 릴리스 본문 스택 문구.
+
+**v1.7.2 대비 동작 차이**: 렌더러가 hayro(pdf.js 와 픽셀이 조금 다름) · 텍스트 스팬 = 텍스트 명령 단위, 상자 = 어센더~디센더(흰 덮기가 글리프를 다 가림) · 저장 시 손댄 페이지도 원본 페이지 사전이 복사돼 기존 링크 주석이 남음(v1.7.2 는 embedPage 평탄화로 잃음), 문서 수준 북마크·폼은 한 원본·페이지 누락 없음일 때만 유지 · 비내장 한글 서체는 나눔고딕으로 대체 렌더 · 이미지→PDF 여러 장을 한 번에 조립.
+
+**검증**: `npm run typecheck` ✅ · `npm test` 25/25 ✅ · `npm run build` ✅(electron-vite + 난독화 4파일, wasm 5.33MB·NanumGothic 2.37MB 자산) · `xvfb-run -a node e2e/engine-smoke.cjs` 28항목 ✅(생성 3쪽: 잉크·스팬 검색 6건·텍스트 추가·노트·URL/페이지 링크·텍스트 수정·형광펜 multiply·페이지 회전·이미지→페이지 → 저장 4쪽, pdftoppm 오류 없음, 원문 텍스트 유지, 3쪽 가로, Link/Text 주석·https:// / 악보 `Goepel Feel #7`: 저장 1쪽·pdffonts 6종·pdftoppm 깨끗 / `~/VPWinGate_Manual.pdf` 30쪽: 잉크·한글 검색·저장 30쪽 2.2MB(원본 5.9MB)·pdftoppm 깨끗·한글 원문 유지 / 콘솔 오류 0) · 기존 e2e `search-check` ✅ · `visual-check` 완주(검사문 없음, 스크린샷 육안: 텍스트 수정 이동 뒤 원문 가림 확인) · `pages-check` ✅ · `draft-check` 14 PASS ✅. `npm run dev`(HMR) 경로의 워커·wasm 로딩은 확인하지 않음. 인스톨러 안 구움. 미커밋.
+
+**리드 재검증(같은 날)**: 엔진 사본을 모노레포 `f93bc87`(문서 수준 항목 이월: 폼 필드·북마크를 페이지 삭제·여러 문서에서도 가지치기해 유지) 빌드본으로 다시 복사(wasm sha256 `0b4da835…a95d`, README 갱신) 뒤 `npm run typecheck` 0 · `npm test` 25/25 · `npm run build` 성공 · `xvfb-run -a node e2e/engine-smoke.cjs` 28/28(악보 글꼴 6 유지, 한글 매뉴얼 30쪽 5.9MB -> 2.2MB 한글 유지, 콘솔 오류 0) · `search-check` 6건 ok · `pages-check` 완료 · `draft-check` PASS 14 / FAIL 0. grep 으로 `pdfjs|pdf-lib|pdf.worker` 없음, `npm ls` 비어 있음. 인스톨러는 굽지 않음(사용자 지시).
+
 
 ## 2026-10-13 — 저장 크기 버그 수정(임베드 묶음 + copyPages) · 대화상자 여백 미러
 

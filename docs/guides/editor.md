@@ -1,7 +1,7 @@
 ---
 title: 편집기 동작 가이드
 created: 2026-07-08
-updated: 2026-07-10
+updated: 2026-10-29
 domain: development
 ---
 
@@ -15,11 +15,22 @@ domain: development
 ## 데이터 흐름
 
 ```
-소스 PDF bytes ──registerDoc──▶ pdf/docs.ts (docId → {bytes, pdf.js proxy})
+소스 PDF bytes ──registerDoc──▶ pdf/registry.ts (docId → {bytes, 엔진 문서 id}) ──open──▶ Rust 엔진 워커(engine/worker.ts)
 store/editor.ts: pages(PageRef[]) + objectsByPage + displaySizes + history
                  └ 모든 편집 = commit() → history push → 불변 갱신
-렌더: PageCanvas = base canvas(pdf.js) + overlay canvas(editor/draw.ts drawObjects)
-저장: pdf/save.ts buildPdf = embedPage 평탄화 + 오버레이 PNG + Link/Text 주석
+렌더: PageCanvas = base canvas(엔진 render_page RGBA → putImageData) + overlay canvas(editor/draw.ts drawObjects)
+스팬: pdf/docs.ts extractTextSpans = 엔진 page_text_spans(텍스트 명령 단위) → TextSpan (텍스트 수정·검색)
+저장: pdf/save.ts buildPdf = 엔진 build_document(원본 페이지 복사 + 회전 + 오버레이 PNG + Link/Text 주석)
+이미지→페이지: pdf/imageToPdf.ts = 엔진 build_document(빈 페이지 + under 이미지)
+```
+
+엔진(v1.8.0~): `src/renderer/src/engine/` — `pkg/`(모노레포 `~/pdf-editor-live/packages/engine` wasm-pack 산출물 사본, 출처·갱신법은 `pkg/README.md`),
+`worker.ts`(모듈 워커, wasm 은 이 스레드에서만), `client.ts`(Promise RPC · 같은 캔버스 렌더 합치기 · 워커 트랩 시 `onEngineReset`), `types.ts`(계약).
+워커가 죽으면 `registry.ts` 가 보관한 바이트로 새 워커에 다시 열고 `renderEpoch.ts` 로 캔버스를 다시 그린다.
+비내장 서체는 엔진이 표준 14 만 그리므로 번들한 `assets/fonts/NanumGothic-Regular.ttf` 를 첫 문서 열 때 `setFallbackFont` 로 등록한다.
+CSP(`src/renderer/index.html`)에 `'wasm-unsafe-eval'` 이 있어야 wasm 이 돈다.
+
+```
 ```
 
 ## 도구 → 인터랙션 (전부 `PageCanvas.tsx`)
@@ -48,8 +59,8 @@ store/editor.ts: pages(PageRef[]) + objectsByPage + displaySizes + history
 
 ## 알려진 제약 (todo와 연동)
 
-- Edit Text 는 pdf.js 텍스트 스팬 단위(줄 조각) — 문단 병합 없음.
-- 저장 시 원본 문서의 기존 링크/북마크는 유지되지 않음 (ADR-0002 트레이드오프).
+- Edit Text 는 엔진 텍스트 스팬 단위(텍스트 명령 하나 = 스팬, 줄 조각) — 문단 병합 없음. 원문은 흰 덮기로 가린다(원문 삭제·벡터 재기록은 모노레포에만).
+- 저장 시 원본 페이지의 주석(링크 등)은 엔진 페이지 복사로 유지된다. 문서 수준 북마크·폼은 모든 페이지가 한 원본에서 오고 빠진 페이지가 없을 때만 유지(엔진 규칙, 모노레포 `docs/guides/engine.md`).
 
 ## 서명(Sign) 흐름 (v1.4.9)
 

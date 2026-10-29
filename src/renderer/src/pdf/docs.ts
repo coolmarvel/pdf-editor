@@ -1,29 +1,26 @@
 /**
- * 소스 PDF 문서 저장소 + pdf.js 렌더링.
- *
- * 문서 상태(store)는 PageRef 배열만 들고 있고, 실제 바이트/pdf.js 프록시는 여기 모듈
- * 레벨 맵에 둔다(직렬화 불가능한 큰 객체를 zustand 밖으로 격리).
+ * 소스 문서 수명주기 + 페이지 렌더 + 텍스트 스팬 (Rust/wasm 엔진, 모노레포 ADR-0003).
+ * 저장소(바이트·엔진 문서 id)는 `./registry.ts`. 여기는 표시 크기 · 캔버스 렌더 · 텍스트 스팬(텍스트 수정·검색) · 전부 해제.
+ * 워커가 죽어 registry 가 문서를 다시 열면(`onDocsReopened`) 스팬 캐시를 비우고 렌더 세대를 올려 모든 캔버스를 다시 그린다.
  */
-import * as pdfjsLib from 'pdfjs-dist'
 import { matchFontFamily } from '@renderer/editor/draw'
 import { clearImageCache } from '@renderer/editor/canvasUtil'
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-import type { PDFDocumentProxy, PageViewport, RenderTask } from 'pdfjs-dist'
 import { DEFAULT_PAGE_SIZE, type PageRef } from '@core/pages'
-import { bumpDocSeq } from '@core/draft'
+import { wasmEngine } from '@renderer/engine/client'
+import type { EnginePageSpans, RenderHandle } from '@renderer/engine/types'
+import { clearRegistry, engineDocOf, onDocsReopened } from './registry'
+import { bumpRenderEpoch } from './renderEpoch'
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
+export { registerDoc, getAllDocBytes, getDocBytes } from './registry'
+export type { RenderHandle } from '@renderer/engine/types'
 
-interface SourceDoc {
-  bytes: Uint8Array
-  proxy: PDFDocumentProxy
-}
-
-const docs = new Map<string, SourceDoc>()
-let dseq = 0
 /** 텍스트 스팬 추출 결과 캐시 — (docId, pageIndex, extraRotation) 의 순수 함수라 문서가 살아있는 동안 재사용 */
 const spanCache = new Map<string, Promise<TextSpan[]>>()
 
+onDocsReopened(() => {
+  spanCache.clear()
+  bumpRenderEpoch()
+})
 
 /** 빈 페이지의 표시 크기(pt) — 사용자 회전이 90/270 이면 가로세로 교환 */
 function blankSizeOf(ref: PageRef): { w: number; h: number } {
@@ -31,72 +28,32 @@ function blankSizeOf(ref: PageRef): { w: number; h: number } {
   return ref.extraRotation % 180 === 0 ? { w, h } : { w: h, h: w }
 }
 
-/** 소스 페이지 프록시 + 표시 뷰포트(소스 자체 회전 + 사용자 추가 회전 반영) */
-async function pageViewport(ref: PageRef, scale: number): Promise<{ page: pdfjsLib.PDFPageProxy; vp: PageViewport }> {
-  const page = await docs.get(ref.docId)!.proxy.getPage(ref.pageIndex + 1)
-  const vp = page.getViewport({ scale, rotation: (page.rotate + ref.extraRotation) % 360 })
-  return { page, vp }
-}
-
-/**
- * 소스 문서 등록. id 를 주면 그 id 로 등록한다 — 임시 저장(draft) 복원 시 PageRef.docId 가 가리키는
- * 원래 id 를 그대로 살려야 하기 때문. 이때 내부 시퀀스를 그 숫자 뒤로 건너뛰어, 이후 새로 등록되는
- * 문서가 복원된 id 와 충돌하지 않게 한다.
- */
-export async function registerDoc(bytes: Uint8Array, id?: string): Promise<{ docId: string; pageCount: number }> {
-  // pdf.js가 버퍼를 detach 하므로 사본을 넘긴다
-  const proxy = await pdfjsLib.getDocument({ data: bytes.slice() }).promise
-  if (id) {
-    dseq = bumpDocSeq(dseq, id)
-    void docs.get(id)?.proxy.destroy()
-  }
-  const docId = id ?? `doc-${++dseq}`
-  docs.set(docId, { bytes, proxy })
-  return { docId, pageCount: proxy.numPages }
-}
-
-/** 등록된 모든 소스 문서의 바이트 (docId → bytes). 임시 저장 직렬화용 */
-export function getAllDocBytes(): Record<string, Uint8Array> {
-  const out: Record<string, Uint8Array> = {}
-  for (const [id, d] of docs) out[id] = d.bytes
-  return out
-}
-
-export function getDocBytes(docId: string): Uint8Array {
-  const d = docs.get(docId)
-  if (!d) throw new Error(`unknown doc: ${docId}`)
-  return d.bytes
-}
-
-/** 문서 단위 자원 전부 해제: pdf.js 프록시·스팬 캐시·이미지 디코드 캐시 */
+/** 문서 단위 자원 전부 해제: 엔진 문서(워커 종료)·스팬 캐시·이미지 디코드 캐시 */
 export function clearDocs(): void {
-  for (const d of docs.values()) void d.proxy.destroy()
-  docs.clear()
+  clearRegistry()
   spanCache.clear()
   clearImageCache()
 }
 
-/** 표시 기준 페이지 크기 (pt). 소스 자체 회전 + 사용자 추가 회전 반영 */
+/** 표시 기준 페이지 크기 (pt). 소스 자체 회전(엔진이 반영) + 사용자 추가 회전 */
 export async function getDisplaySize(ref: PageRef): Promise<{ w: number; h: number }> {
   if (ref.docId === 'blank') return blankSizeOf(ref)
-  const { vp } = await pageViewport(ref, 1)
-  return { w: vp.width, h: vp.height }
+  const [w, h] = await wasmEngine.pageSize(await engineDocOf(ref.docId), ref.pageIndex)
+  return ref.extraRotation % 180 === 0 ? { w, h } : { w: h, h: w }
 }
 
 /**
  * 페이지를 캔버스에 렌더 (scale = CSS px / pt 비율 × devicePixelRatio 등 호출부 결정).
- * 반환값 = pdf.js RenderTask (빈 페이지는 undefined). 호출부가 task.cancel() 로 진행 중 렌더를 끊을 수 있다
- * (줌 드래그처럼 같은 캔버스에 렌더가 연달아 걸릴 때). 취소되면 task.promise 가 RenderingCancelledException 으로 거부된다.
- * 기존처럼 `await renderPage(...)` 만 하면 렌더 완료까지 기다린다.
- * opts.onTask 는 render 시작 직후(완료 전) 호출되므로 여기서 받은 task 로 진행 중 렌더를 끊을 수 있고,
- * opts.signal 이 abort 된 뒤에는 캔버스에 손대지 않는다 (같은 캔버스에 렌더가 겹치면 pdf.js 가 두 번째를 거부한다).
+ * 반환값 = 렌더 손잡이(빈 페이지는 undefined). 워커 안 래스터는 동기라 중간에 끊지 못한다 — `cancel()` 은 결과를 버리고,
+ * 같은 캔버스의 아직 보내지 않은 옛 요청은 클라이언트 큐가 버린다(promise 가 RenderingCancelledException 으로 거부).
+ * opts.onTask 는 요청 직후(완료 전) 호출되고, opts.signal 이 abort 된 뒤에는 캔버스에 손대지 않는다. opts.key 는 렌더 큐 합치기 키(기본 = 페이지·본문/썸네일).
  */
 export async function renderPage(
   ref: PageRef,
   canvas: HTMLCanvasElement,
   scale: number,
-  opts?: { signal?: AbortSignal; onTask?: (task: RenderTask) => void }
-): Promise<RenderTask | undefined> {
+  opts?: { signal?: AbortSignal; onTask?: (task: RenderHandle) => void; key?: string }
+): Promise<RenderHandle | undefined> {
   if (opts?.signal?.aborted) return undefined
   if (ref.docId === 'blank') {
     const { w, h } = blankSizeOf(ref)
@@ -107,17 +64,26 @@ export async function renderPage(
     ctx.fillRect(0, 0, canvas.width, canvas.height)
     return undefined
   }
-  const { page, vp } = await pageViewport(ref, scale)
-  // 뷰포트 준비 중 호출부가 취소했으면 캔버스를 건드리지 않는다 (진행 중인 이전 렌더를 깨지 않도록)
+  const engineDoc = await engineDocOf(ref.docId)
   if (opts?.signal?.aborted) return undefined
-  canvas.width = Math.round(vp.width)
-  canvas.height = Math.round(vp.height)
-  const ctx = canvas.getContext('2d')!
-  const task = page.render({ canvasContext: ctx, viewport: vp })
-  // 완료를 기다리기 전에 task 를 넘겨 호출부가 진행 중 렌더를 실제로 cancel 할 수 있게 한다
-  opts?.onTask?.(task)
-  await task.promise
-  return task
+  let cancelled = false
+  // key = 페이지·캔버스 종류(배율로 구분: 썸네일과 본문은 배율이 다르다). 저장처럼 밀려나면 안 되는 렌더는 호출부가 고유 key 를 준다
+  const key = opts?.key ?? `${ref.id}:${scale > 1 ? 'main' : 'thumb'}`
+  const promise = wasmEngine.render(engineDoc, ref.pageIndex, scale, ref.extraRotation % 360, key).then((r) => {
+    if (cancelled || opts?.signal?.aborted) return
+    canvas.width = r.width
+    canvas.height = r.height
+    canvas.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(r.rgba), r.width, r.height), 0, 0)
+  })
+  const handle: RenderHandle = {
+    promise,
+    cancel: () => {
+      cancelled = true
+    }
+  }
+  opts?.onTask?.(handle)
+  await promise
+  return handle
 }
 
 export interface TextSpan {
@@ -132,7 +98,7 @@ export interface TextSpan {
   italic?: boolean
 }
 
-/** Edit Text용: 페이지의 텍스트 스팬을 표시 공간 정규화 좌표로 추출 */
+/** Edit Text·검색용: 페이지의 텍스트 스팬을 표시 공간 정규화 좌표로 추출 */
 export function extractTextSpans(ref: PageRef): Promise<TextSpan[]> {
   if (ref.docId === 'blank') return Promise.resolve([])
   const key = `${ref.docId}:${ref.pageIndex}:${ref.extraRotation}`
@@ -147,45 +113,45 @@ export function extractTextSpans(ref: PageRef): Promise<TextSpan[]> {
 }
 
 async function computeTextSpans(ref: PageRef): Promise<TextSpan[]> {
-  const { page, vp } = await pageViewport(ref, 1)
-  const content = await page.getTextContent()
-  // 폰트 객체(이름·굵게·기울임)는 렌더/오퍼레이터 목록을 만든 뒤에야 commonObjs 에 실린다 — 없으면 한 번 만들어 채운다
-  const fontNames = new Set(content.items.map((it) => ('fontName' in it ? it.fontName : '')).filter(Boolean))
-  if ([...fontNames].some((n) => !page.commonObjs.has(n))) await page.getOperatorList().catch(() => undefined)
-  const fontOf = (name: string): { font: string; bold: boolean; italic: boolean } => {
-    const generic = content.styles[name]?.fontFamily
-    const f = page.commonObjs.has(name) ? (page.commonObjs.get(name) as { name?: string; bold?: boolean; italic?: boolean; fallbackName?: string } | null) : null
-    const pdfName = f?.name ?? ''
-    return {
-      font: matchFontFamily(pdfName, f?.fallbackName ?? generic),
-      bold: f?.bold ?? /bold|black|heavy/i.test(pdfName),
-      italic: f?.italic ?? /italic|oblique/i.test(pdfName)
-    }
+  const page = await wasmEngine.pageTextSpans(await engineDocOf(ref.docId), ref.pageIndex)
+  return engineSpansToTextSpans(page, ref.extraRotation)
+}
+
+/** 사용자 추가 회전(시계 방향)을 상자에 적용 — (w,h) 는 회전 전 프레임의 페이지 크기 */
+function rotateRect(r: [number, number, number, number], rot: number, w: number, h: number): [number, number, number, number] {
+  const [x0, y0, x1, y1] = r
+  switch (rot) {
+    case 90:
+      return [h - y1, x0, h - y0, x1]
+    case 180:
+      return [w - x1, h - y1, w - x0, h - y0]
+    case 270:
+      return [y0, w - x1, y1, w - x0]
+    default:
+      return r
   }
-  const spans: TextSpan[] = []
-  for (const item of content.items) {
-    if (!('str' in item) || !item.str.trim()) continue
-    // 텍스트 기준점(베이스라인 시작)을 뷰포트 공간으로
-    const tx = pdfjsLib.Util.transform(vp.transform, item.transform)
-    const fontH = Math.hypot(tx[2], tx[3])
-    const dirX = tx[0] / (Math.hypot(tx[0], tx[1]) || 1)
-    const dirY = tx[1] / (Math.hypot(tx[0], tx[1]) || 1)
-    const wPx = item.width * vp.scale
-    // 축 정렬 가정(0/90/180/270 회전): 시작점 + 진행방향으로 rect 구성
-    const x0 = tx[4]
-    const y0 = tx[5]
-    const x1 = x0 + dirX * wPx
-    const y1 = y0 + dirY * wPx
-    const minX = Math.min(x0, x1)
-    const minY = Math.min(y0, y1) - (dirY === 0 ? fontH : 0)
-    const w = Math.max(Math.abs(x1 - x0), dirY !== 0 ? fontH : 0)
-    const h = dirY === 0 ? fontH : Math.abs(y1 - y0)
-    spans.push({
-      rect: { x: minX / vp.width, y: minY / vp.height, w: w / vp.width, h: h / vp.height },
-      text: item.str,
-      size: fontH / vp.height,
-      ...fontOf(item.fontName)
+}
+
+/**
+ * 엔진 스팬(`page_text_spans`: 텍스트 명령 하나 = 스팬 하나, 상자는 /Rotate 표시 프레임 pt·y 아래) → 편집기 `TextSpan`.
+ * 상자는 어센더~디센더 em 상자의 합집합이라 흰 덮기가 글리프를 다 가린다. 서체는 BaseFont 이름을 `matchFontFamily` 로 우리 목록 키에 맞춘다
+ * (못 맞추면 serif/mono 플래그로 Times·Courier, 그 밖은 Helvetica).
+ */
+export function engineSpansToTextSpans(page: EnginePageSpans, extraRotation: number): TextSpan[] {
+  const rot = ((Math.round(extraRotation) % 360) + 360) % 360
+  const [W, H] = rot % 180 === 0 ? [page.width, page.height] : [page.height, page.width]
+  const out: TextSpan[] = []
+  for (const s of page.spans) {
+    if (!s.text.trim()) continue
+    const [x0, y0, x1, y1] = rotateRect(s.rect, rot, page.width, page.height)
+    out.push({
+      rect: { x: x0 / W, y: y0 / H, w: (x1 - x0) / W, h: (y1 - y0) / H },
+      text: s.text,
+      size: s.size / H,
+      font: matchFontFamily(s.pdfName, s.mono ? 'monospace' : s.serif ? 'serif' : 'sans-serif'),
+      bold: s.bold,
+      italic: s.italic
     })
   }
-  return spans
+  return out
 }

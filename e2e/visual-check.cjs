@@ -5,16 +5,10 @@ const fs = require('fs')
 const ROOT = path.join(__dirname, '..')
 const OUT = process.env.E2E_OUT ?? __dirname
 const { _electron } = require(path.join(ROOT, 'node_modules', 'playwright-core'))
-const { PDFDocument, StandardFonts } = require(path.join(ROOT, 'node_modules', 'pdf-lib'))
+const { makeTextPdf } = require('./minipdf.cjs')
 
 async function makePdf() {
-  const doc = await PDFDocument.create()
-  const font = await doc.embedFont(StandardFonts.Helvetica)
-  for (let i = 0; i < 2; i++) {
-    const p = doc.addPage([595, 842])
-    p.drawText(`Sample page ${i + 1}`, { x: 60, y: 760, size: 24, font })
-  }
-  return Buffer.from(await doc.save())
+  return makeTextPdf([1, 2].map((n) => ({ w: 595, h: 842, texts: [{ x: 60, y: 760, size: 24, text: `Sample page ${n}` }] })))
 }
 
 async function main() {

@@ -9,8 +9,8 @@ import { preloadObjectImages } from '@renderer/editor/canvasUtil'
  * 페이지 썸네일 캔버스 (사이드바·Manage Pages 공용). width px(백킹 스토어)에 맞춰 렌더.
  * - 뷰포트 ±300px 안에 들어올 때만 렌더 (500쪽 문서를 열어도 보이는 것만 래스터화)
  * - ±1500px 밖으로 멀어지면 백킹 스토어를 비운다(width=0). 래퍼가 aspect-ratio 로 높이를 잡고 있어 스크롤 높이는 불변
- * - 언마운트/재렌더 시 진행 중인 pdf.js RenderTask 를 cancel (RenderingCancelledException 은 삼킨다)
- * - 페이지 위 객체(서명·텍스트·낙서 등)는 별도 오버레이 캔버스에 그린다 — 객체가 바뀔 때 pdf.js 재래스터화 없이 오버레이만 다시 그림
+ * - 언마운트/재렌더 시 진행 중인 엔진 렌더 손잡이를 cancel (RenderingCancelledException 은 삼킨다)
+ * - 페이지 위 객체(서명·텍스트·낙서 등)는 별도 오버레이 캔버스에 그린다 — 객체가 바뀔 때 엔진 재래스터화 없이 오버레이만 다시 그림
  */
 export default function ThumbCanvas({ page, width, pageW, pageH }: { page: PageRef; width: number; pageW: number; pageH: number }): JSX.Element {
   const ref = useRef<HTMLCanvasElement>(null)

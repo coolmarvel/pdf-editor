@@ -520,7 +520,7 @@ function PageCanvas({ page, zoom }: Props): JSX.Element {
             origText: span.text,
             size: span.size,
             color: textStyle.color,
-            // 원본 서체·굵기·기울임을 승계 (pdf.js 폰트 메타). 못 읽으면 툴바 기본값
+            // 원본 서체·굵기·기울임을 승계 (엔진 스팬의 서체 메타). 못 읽으면 툴바 기본값
             font: span.font ?? textStyle.font,
             bold: span.bold ?? textStyle.bold,
             italic: span.italic ?? textStyle.italic,
