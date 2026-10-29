@@ -4,7 +4,7 @@
 
 - 출처: 모노레포 `~/pdf-editor-live/packages/engine` (Rust 크레이트 `pdf-engine` 0.1.0, hayro + lopdf, wasm-bindgen) 의 `pkg/`.
   ADR 은 그 저장소 `docs/adr/0003-rust-wasm-engine.md`, 동작 설명은 `docs/guides/engine.md`.
-- 현재 사본: 2026-10-29, 엔진 소스 커밋 `f93bc87`(문서 수준 항목 이월 포함) 빌드본, `pdf_engine_bg.wasm` sha256 `0b4da835a89ba10443ef1ffc5e2f8775787f116dbdd3273c67b2d8c0f771a95d`. (처음 복사는 같은 날 `546d6ab` 빌드본)
+- 현재 사본: 2026-10-29, 엔진 소스 커밋 `bda57ba`(문서 수준 항목 전체: 페이지 라벨·태그 구조·XMP·레이어 설정·다른 문서 북마크, 합치기/추출 통합) 빌드본, `pdf_engine_bg.wasm` sha256 `7515ef4c273c17aea71d960c304ae8a2eaefb882134dcb26971e4aeae1b995af`. (이전: 같은 날 `546d6ab`, `f93bc87`)
 - 담은 파일: `pdf_engine.js`(JS 글루) · `pdf_engine_bg.wasm` · `pdf_engine.d.ts` · `pdf_engine_bg.wasm.d.ts` · `package.json`.
 
 ## 새로 고치는 법

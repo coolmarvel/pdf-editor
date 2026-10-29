@@ -10,6 +10,13 @@ domain: development
 이 파일이 **"언제 무슨 일이 있었나"의 SSOT**다. 세션마다 최상단에 블록 추가.
 (2026-07-08부터 git 에 올리지만 커밋/푸시는 사용자가 직접·성긴 단위 — git history 를 이력 SSOT 로 삼지 않는다.)
 
+## 2026-10-29 (3) - 엔진 사본 갱신(`bda57ba`: 문서 수준 항목 전체 · 합치기/추출 통합)
+
+**요청**: 모노레포 남은 엔진 항목을 양쪽에 반영(인스톨러 제외).
+
+- **엔진 사본**: `src/renderer/src/engine/pkg/` 를 모노레포 `bda57ba` 빌드본으로 교체(README 출처·sha256 갱신). 저장에 페이지 라벨·태그 구조(손대지 않은 첫 사본만)·XMP·레이어 설정·다른 문서 북마크·완전한 필드 이름 충돌 검사가 들어가고, 우리가 얹는 오버레이는 `/Artifact` 로 표시된다. 이 앱 코드는 바꾸지 않았다(엔진 명세의 새 필드는 모두 선택).
+- **검증**: `npm run typecheck` 0 · `npm test` 25/25 · `npm run build` 성공 · `xvfb-run -a node e2e/engine-smoke.cjs` 28/28(악보 글꼴 6 · 한글 매뉴얼 30쪽 2.2MB) · `search-check` 14 ok · `pages-check` 완료(exit 0) · `draft-check` 14 PASS · pdf.js/pdf-lib 흔적 0. 인스톨러는 굽지 않음.
+
 ## 2026-10-29 (2) - project-seed 반영: 도구 중립 AGENTS.md · 에이전트 작업 계약 · 도메인 계약 · 훅
 
 **요청**: `~/project-seed`(2026-10-14~27 문서·하네스 규약)를 이 저장소에 맞게 반영. 자매 `~/pdf-editor-live`(2026-10-28 반영)를 예시로. 문서·하네스만, `src/`·`e2e/`·`test/`·`package.json` 은 건드리지 않음. 커밋·push 없음.
