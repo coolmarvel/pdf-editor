@@ -1,7 +1,7 @@
 ---
 title: 문서 작성 가이드
 created: 2026-07-07
-updated: 2026-07-10
+updated: 2026-10-29
 domain: development
 ---
 
@@ -22,6 +22,9 @@ pdf-editor 는 2026-07-08부터 git 에 올리지만 **커밋/푸시는 사용�
 - **"무슨 일이 언제 있었나"의 SSOT = `docs/session-log.md`** (git log 대용).
 - `todo.md`는 그들과 동일하게 **미해결·향후 작업만** 담는다.
 - 세션이 끝날 때 반드시 `session-log.md` 최상단에 그 세션 블록을 추가한다.
+- 현재 인수인계는 session-log **최상단 1~2 블록**이 맡는다(project-seed 의 `current-state.md` 를 따로 두지 않는다. 최상단 블록의 "다음"·"함정"을 빠뜨리지 않는다).
+- 팀(병렬 worker) 작업에서는 리드만 session-log·todo 를 고친다. 운영 규약은 `agent-workflow.md`.
+- 업무 규칙과 그 검사 경로의 색인은 `domain-contract.md`. 규칙 원문은 ADR·코드가 SSOT 이고, 기대값을 바꾸면 그 표의 상태도 고친다.
 
 ## 폴더 구조
 
@@ -30,10 +33,12 @@ docs/
 ├── writing-guide.md      # 이 파일 (문서 작성 규칙)
 ├── session-log.md        # 세션별 진행 이력 (git history 대용, 최신이 맨 위) — 진행상태 SSOT
 ├── todo.md               # 미해결·향후 작업 (P1~P4)
+├── agent-workflow.md     # 에이전트 작업 계약: 단일 기본·팀 선택, 검증 계층, 실제 적용된 훅
+├── domain-contract.md    # 업무 불변조건 색인: 규칙 ID·출처·상태·검사 경로
 ├── changelog.md          # 배포/버전 단위 사람용 요약 (인스톨러 릴리스 노트)
 ├── adr/                  # 아키텍처 결정 기록
 │   ├── 0000-template.md
-│   └── NNNN-*.md
+│   └── NNNN-*.md             # 0001 분리·하네스, 0002 에디터 구조, 0003 Rust/wasm 엔진
 ├── plans/                # 기능 단위 구현 계획 (착수 전/중)
 │   └── YYYY-MM-DD-*.md
 └── guides/               # 기능별 동작·구현 가이드 (현재 코드 기준)
@@ -75,30 +80,32 @@ domain: <아래 표에서>
 사용자 관점 설명(해당 시).
 
 ## 관련 코드
-주요 파일 경로를 1:1 대조 가능하게 (`src/renderer/src/convert/pdf.ts:42`).
+주요 파일 경로를 1:1 대조 가능하게 (`src/renderer/src/pdf/save.ts:42`).
 ```
 
 `domain` 값:
 
 | 값 | 대상 |
 |---|---|
-| `core` | 형식 감지·변환 레지스트리 (`src/core/`) |
-| `conversion` | 실제 변환 구현 (`src/renderer/src/convert/`) |
-| `ui` | 화면·컴포넌트 (`App.tsx`, `components/`) |
+| `core` | 순수 로직 (`src/core/`: 객체 모델·페이지 연산·히스토리·임시 저장) |
+| `engine` | Rust/wasm 엔진 연결 (`src/renderer/src/engine/`, `pdf/`) |
+| `ui` | 화면·컴포넌트 (`components/`) |
 | `packaging` | 빌드·인스톨러·electron 메인/프리로드 |
-| `development` | 문서·도구 등 도메인 무관 |
+| `development` | 문서·도구·하네스 등 도메인 무관 |
 
 ADR은 `domain` 대신 `status`(`proposed`/`accepted`/`deprecated`/`superseded`)를 쓴다. `adr/0000-template.md` 참고.
 
 ## 작성 원칙
 
 1. **현재 코드 기준으로만** — 구현된 것만 적는다. 향후 계획은 `todo.md`나 ADR로. 코드가 바뀌면 문서와 `updated`도 갱신. 코드와 어긋난 문서는 없느니만 못하다.
-2. **SSOT 명시** — 같은 사실을 두 곳에 적지 않는다. 한쪽이 권위를 갖고 나머진 링크. (예: 변환 경로 진실은 `core/conversions.ts`, CLAUDE.md는 요약만)
-3. **파일 경로·식별자를 풍부하게** — `src/renderer/src/convert/image.ts:71` 형태로. AI가 grep·Read로 바로 찾게.
-4. **불변·계약을 명문화** — "이미지 URL 소유권은 App, Preview는 revoke 금지" 같은 조건은 분명히. 부수효과(파일 저장, URL 생성/해제)를 빠뜨리지 않는다.
+2. **SSOT 명시** — 같은 사실을 두 곳에 적지 않는다. 한쪽이 권위를 갖고 나머진 링크. (예: 저장 파이프라인 진실은 `pdf/save.ts`와 ADR-0003, CLAUDE.md는 요약만)
+3. **파일 경로·식별자를 풍부하게** — `src/renderer/src/pdf/save.ts:71` 형태로. AI가 grep·Read로 바로 찾게.
+4. **불변·계약을 명문화** — "`engine/pkg/` 는 사본이라 손으로 고치지 않는다" 같은 조건은 분명히. 부수효과(파일 저장, 워커 재시작)를 빠뜨리지 않는다.
 5. **함정·과거 사고는 1줄로 보존** — 룰의 근거가 된 사고는 한 줄로. 다음 사람/AI가 룰을 함부로 깨지 않게.
 6. **충실하되 군더더기 없이** — 반복 금지. 코드는 핵심만 발췌. ❌금지/✅권장 표 선호.
 7. **튜토리얼 톤 배제** — 사실·계약·경로 위주.
+8. **특수기호 (2026-10-29부터 새로 쓰는 글)**: em-dash(—)·en-dash(–)·유니코드 화살표(→)·원문자(①)·이모지를 새로 쓰는 문서·주석·커밋 메시지에 넣지 않는다. 구분은 콜론이나 하이픈(-), 열거는 쉼표, 흐름은 `->`. 가운뎃점(·)과 ×는 허용. 기존 글은 그 부분을 고칠 때만 바꾸고 일괄 치환하지 않는다. UI 문구의 줄표 금지는 전면 적용.
+9. **적용 상태와 계획을 구분**: 훅·검사·자동화는 실제 동작을 확인한 것만 "적용"이라 쓴다. 실행하지 않은 검사는 통과로 쓰지 않고 "미실행"으로 적는다(검증 결과는 그 revision 의 증거일 뿐 다음 revision 의 증거가 아니다).
 
 ## 포함하지 않는 것
 
@@ -116,9 +123,10 @@ ADR은 `domain` 대신 `status`(`proposed`/`accepted`/`deprecated`/`superseded`)
 2. 템플릿·원칙에 맞춰 작성
 3. `created`(신규)/`updated`(수정) 날짜 갱신
 4. 코드와 1:1 대조 — 언급한 파일·함수·경로가 실제 존재하는지 확인
-5. `CLAUDE.md`의 문서 인덱스에 누락 없는지 확인
+5. `CLAUDE.md`의 문서 인덱스와 `AGENTS.md` 에 누락 없는지 확인
 
 ## 루트에 남기는 파일
 
 - `README.md` — 프로젝트 진입점
 - `CLAUDE.md` — Claude Code가 세션 시작 시 자동 로드하는 지침 (부팅 프로토콜 포함)
+- `AGENTS.md` - 도구 중립 진입점(Codex 등). 절대 규칙 요약. 프로젝트 사실은 `CLAUDE.md` 를 가리킨다

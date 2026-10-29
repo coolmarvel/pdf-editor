@@ -22,3 +22,6 @@ e2e/.classic/
 
 # 엔진 스모크 산출물(저장 PDF·스크린샷, 2026-10-29)
 e2e/.engine/
+
+# 에이전트 로컬 설정(권한 캐시 등, 개인 것)
+.claude/settings.local.json

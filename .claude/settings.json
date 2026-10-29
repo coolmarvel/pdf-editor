@@ -1,0 +1,29 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PROJECT_DIR}/scripts/hooks/env-guard.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PROJECT_DIR}/scripts/hooks/git-add-guard.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
+  "disableRemoteControl": true,
+  "remoteControlAtStartup": false,
+  "autoUploadSessions": false
+}

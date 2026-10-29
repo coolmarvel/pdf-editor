@@ -16,7 +16,9 @@
    - 반영을 끝내면 두 디렉토리의 png 를 `docs/feedback-archive/YYYY-MM-DD-*/` 로 옮겨 비운다
      → 디렉토리 안의 png = 항상 "아직 안 본 새 피드백". (루트에 `스크린샷 *.png` 가 있으면 그것도 동일하게 취급)
 
-이 4단계를 끝내면 이전 세션의 맥락을 완전히 복구한 상태가 된다. 그 다음 작업을 시작한다.
+5. `git status` 에 모르는 변경이 있으면 session-log 와 대조한다(다른 세션·에이전트 작업일 수 있음, 건드리지 않음).
+
+이 5단계를 끝내면 이전 세션의 맥락을 완전히 복구한 상태가 된다. 그 다음 작업을 시작한다.
 
 ## 🔴 변경 후 자동 규칙 (사용자가 매번 요청하지 않아도 수행)
 
@@ -36,6 +38,8 @@
    ```
    (Windows: WSL에 wine 있음. 데스크톱 = `/mnt/c/Users/user/Desktop`. macOS: 현재 맥의 `~/Desktop`.)
 5. 사용자에게 "vX.Y.Z 인스톨러/DMG를 바탕화면에 구웠으니 설치·테스트 후 스크린샷 달라"고 알린다.
+6. 실행하지 않은 검사는 통과로 쓰지 않고 "미실행"으로 적는다. 에이전트 운영은 단일이 기본이고 팀은 필요할 때만이며 그때는 리드만 session-log·todo·공통 설정을 고친다(`docs/agent-workflow.md`). 도구 중립 규칙은 `AGENTS.md`, 업무 불변조건은 `docs/domain-contract.md`.
+7. 훅(`scripts/hooks/`, stdin JSON): `.env` 편집·`git add -A/.` 차단. 고치면 `bash scripts/hooks/test-guards.sh`. push·인스톨러 전 `/release-check`, 보안 리뷰 `/review-security`(`.claude/commands/`). Claude 훅은 Codex 등에는 적용되지 않는다.
 
 ## 버전 정책 (semver `MAJOR.MINOR.PATCH` — 2026-07-08 사용자가 규칙 확정)
 
@@ -73,6 +77,8 @@
 | `docs/writing-guide.md` | **문서 지배 규칙** (SSOT·frontmatter·코드 1:1 대조). 문서 쓰기 전 필독 |
 | `docs/session-log.md` | 세션별 진행 이력. **"언제 무슨 일" SSOT** (최신이 위) |
 | `docs/todo.md` | 미해결·향후 작업만 (P1~P4). 완료분은 session-log로 |
+| `docs/agent-workflow.md` | 에이전트 작업 계약(단일 기본·팀 선택·검증 계층·적용된 훅) |
+| `docs/domain-contract.md` | 업무 불변조건 색인(규칙 ID -> 출처 -> 검사 경로 -> 상태) |
 | `docs/changelog.md` | 인스톨러 릴리스 단위 사람용 요약 |
 | `docs/adr/*.md` | 구조적 결정 기록. 왜 이렇게 했는가 |
 | `docs/plans/*.md` | 기능 단위 구현 계획 (`YYYY-MM-DD-*`) |

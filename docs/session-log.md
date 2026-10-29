@@ -10,6 +10,21 @@ domain: development
 이 파일이 **"언제 무슨 일이 있었나"의 SSOT**다. 세션마다 최상단에 블록 추가.
 (2026-07-08부터 git 에 올리지만 커밋/푸시는 사용자가 직접·성긴 단위 — git history 를 이력 SSOT 로 삼지 않는다.)
 
+## 2026-10-29 (2) - project-seed 반영: 도구 중립 AGENTS.md · 에이전트 작업 계약 · 도메인 계약 · 훅
+
+**요청**: `~/project-seed`(2026-10-14~27 문서·하네스 규약)를 이 저장소에 맞게 반영. 자매 `~/pdf-editor-live`(2026-10-28 반영)를 예시로. 문서·하네스만, `src/`·`e2e/`·`test/`·`package.json` 은 건드리지 않음. 커밋·push 없음.
+
+- **AGENTS.md**: Codex 용으로 CLAUDE.md 를 복사해 두었던 것을 도구 중립 진입점으로 재작성(읽는 순서, 절대 규칙 8개: 문서 동시 갱신 · 검증 명령과 미실행 보고 · 커밋/push/인스톨러는 요청 시만 · `.env`·`git add -A` 금지 · ADR 먼저 · `engine/pkg/` 사본은 손대지 않음 · 웹과 에디터 동기화 · 줄표/기호 규칙). 프로젝트 사실·버전 정책·인스톨러 절차는 CLAUDE.md 가 SSOT 로 남는다.
+- **신규 문서**: `docs/agent-workflow.md`(single 기본, 팀 선택, 리드만 로그·todo·버전, 이 저장소 실제 검증 명령, 완료 판정) · `docs/domain-contract.md`(규칙 11개: PDF 로컬 처리, 엔진 단일, 저장 시 원본 서체·주석 보존, 워커 복구, 페이지 연산, draft, 텍스트 수정 방식, 버전·릴리스 정책). 검사 경로가 없는 규칙은 "자동 검사 없음"으로 표시.
+- **writing-guide**: 규칙 8(기호, 2026-10-29부터 새 글만, 일괄 치환 없음)·9(적용 상태와 계획 구분, 미실행 검사는 통과가 아님) 추가, 팀/인수인계/domain-contract 링크, 폴더 구조에 새 문서 2개, 옛 `file-converter` 시절 `domain` 값·예시(convert/*.ts)를 이 저장소 기준으로 교체.
+- **CLAUDE.md**: 부팅 5단계(모르는 git 변경 대조) + 변경 후 규칙 6·7(미실행 검사, 팀 규칙, 훅) + 문서 인덱스 2행. 버전 정책·인스톨러 명령·코드 지도는 그대로.
+- **훅**: `scripts/hooks/{read-input.cjs,env-guard.sh,git-add-guard.sh,test-guards.sh}`(pdf-editor-live 에서 복사, 케이스 경로만 조정) + `.claude/settings.json` 신규(PreToolUse 2개; 기존 훅은 없었다). jq 의존 없음.
+- **반영하지 않은 것**: `format.sh`(저장소에 Prettier·`printWidth` 설정 없음, 코드 스타일 훅은 이 동결 저장소에서 새 위험), 서버·구독·보관함 규칙, 코드 구성 ADR(0002 는 웹 쪽 규칙), project-seed `INITIALIZE.md`·`current-state.md`(session-log 최상단이 맡음).
+- **검증**: `bash scripts/hooks/test-guards.sh` 18/18 ok(차단 8, 허용 10). typecheck·test·build·engine-smoke 는 코드를 건드리지 않아 **미실행**. 훅이 실제 Claude 세션에서 발동하는지는 다음 세션에서 `git add -A` 시도로 확인 필요(이번 세션 미확인). 미커밋.
+- **다음**: 훅 발동 확인, 도메인 계약의 `assumed` 2건(PDF-05 워커 복구 e2e, EDT-02 draft 복원 e2e)은 필요하면 검사 추가.
+- **리드 보강**: `.claude/settings.json` 에 Remote Control·세션 업로드 끔(`disableRemoteControl`·`remoteControlAtStartup`·`autoUploadSessions`, 시드 ADR 하네스) · `.gitignore` 에 `.claude/settings.local.json` · `.claude/commands/release-check.md`(push·인스톨러 전) · `review-security.md`(Electron 보안 항목 포함) · agent-workflow 에 서브에이전트 모델 기준. test-guards 18/18 재확인.
+
+
 ## 2026-10-29 — v1.8.0: PDF 엔진을 Rust/wasm 으로 교체(pdf.js·pdf-lib 제거) · ADR-0003
 
 **요청**: 모노레포(`~/pdf-editor-live`)의 Rust 엔진 **부분만** 적용("rust engine 부분만 적용"). v1.7.2 UI·스토어·객체 모델·i18n·동작은 그대로. 추가 지시: pdf-lib·pdf.js 는 코드·의존성 어디에도 남기지 않는다. 버전은 1.8.0(모노레포 `apps/desktop` 2.0.0 과 appId 가 같아 2.x 금지). 인스톨러는 굽지 않는다(사용자: 지금은 빌드·설치본 불필요).

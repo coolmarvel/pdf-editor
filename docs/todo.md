@@ -11,6 +11,8 @@ domain: development
 
 - [ ] **Rust 엔진 후속(2026-10-29 v1.8.0)**: ① 리드가 모노레포 엔진 최종 `pkg` 를 `src/renderer/src/engine/pkg/` 로 다시 복사하고 README 해시 갱신 → typecheck·test·build·`engine-smoke` 재실행 ② 사용자 설치 테스트(인스톨러 미빌드) — 큰 문서 렌더 속도·메모리, 인쇄, 페이지 추출, 이미지 가져오기(16bit PNG·webp) ③ `npm run dev`(HMR)에서 워커·wasm 로딩 확인 ④ 서체를 넣지 않은 한글 PDF(나눔고딕 대체) 실물 확인 — 스모크 픽스처는 전부 내장 서체 ⑤ 웹처럼 텍스트 수정을 원문 삭제(`page_erase_text`)+벡터 글자로 바꿀지 결정(지금은 흰 덮기 + PNG)
 
+- [ ] **하네스 후속(2026-10-29 (2))**: ① 새 훅(`.claude/settings.json` PreToolUse)이 실제 세션에서 `git add -A`·`.env` 편집을 막는지 확인 ② `docs/domain-contract.md` 의 `assumed` 규칙(워커 복구 PDF-05, 임시 저장 복원 EDT-02)에 e2e 검사를 둘지 결정
+
 - [ ] **클래식 UI 후속(2026-10-12 v1.7.2)**: ① 사용자 설치 테스트 — 메뉴 바·상태 줄·스킨 전환·24px 컨트롤의 실기 체감, 1280 폭에서 툴바 가로 스크롤 ② 옵션 바 컨트롤 전수 점검(웹은 별도 라운드에서 `Group`/`GDivider` "라벨: 컨트롤" 문법으로 정리 중 — 결과를 받아 동기화) ③ 호환 토큰(`ui.gray` 등 104곳)을 `ui.classic` 로 정리 ④ 웹 메뉴의 복사/붙여넣기/복제 항목은 데스크톱 스토어에 클립보드 조각이 없어 뺐다 — 클립보드 동기화(2026-09-04 (6)) 때 함께
 
 - [ ] **웹 버전과 에디터 동기화** — 에디터(`src/core`·`src/renderer`) 수정 시 `~/pdf-editor-live/packages/editor` 에도 반영
